@@ -21,12 +21,15 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"database/sql"
 
 	_ "github.com/denisenkom/go-mssqldb"
+
+	"github.com/xuri/excelize/v2"
 
 	"github.com/magiconair/properties"
 )
@@ -43,10 +46,22 @@ const sqlquerries = "sql_queries.json"
 // Executed Query Details
 const executed_queries = "executed_queries.csv"
 
+const excelFileName = "sql_diagnostics.xlsx"
+
 //END: TODO WORK
 
 func main() {
 	log.Println("Starting Application...")
+
+	executeSQLQueries()
+
+	createExcelFromCSV()
+
+	log.Println("Done Application...")
+}
+
+func executeSQLQueries() {
+
 	sqlConfig := readSQLConfig(sqlConfigProp)
 
 	// Check if the CSV file exists and remove it if it does
@@ -99,7 +114,6 @@ func main() {
 
 		executeQuery(db, query.Query, fileName)
 	}
-	log.Println("Done Application...")
 }
 
 /**
@@ -268,6 +282,109 @@ func createFileName(index int, queryName string) string {
 
 	// Concatenate index and sanitized query name
 	return fmt.Sprintf("%d_%s.csv", index, queryName)
+}
+
+func createExcelFromCSV() {
+
+	// Check if the CSV file exists and remove it if it does
+	if _, err := os.Stat(excelFileName); err == nil {
+		if err := os.Remove(excelFileName); err != nil {
+			log.Fatalf("Failed to remove existing excelFileName file: %v", err)
+		}
+	}
+
+	// Get all files in the current directory
+	files, err := os.ReadDir(".")
+	if err != nil {
+		fmt.Printf("Error reading directory: %v\n", err)
+		return
+	}
+
+	// Filter CSV files
+	var csvFiles []string
+	for _, file := range files {
+		if !file.IsDir() && strings.HasSuffix(file.Name(), ".csv") {
+			csvFiles = append(csvFiles, file.Name())
+		}
+	}
+
+	// Separate executed_queries.csv
+	var otherFiles []string
+	for _, file := range csvFiles {
+		if file != "executed_queries.csv" {
+			otherFiles = append(otherFiles, file)
+		}
+	}
+
+	// Custom sort for other files
+	sort.SliceStable(otherFiles, func(i, j int) bool {
+		// Extract numeric prefixes for comparison
+		iPrefix, iErr := strconv.Atoi(strings.SplitN(otherFiles[i], "_", 2)[0])
+		jPrefix, jErr := strconv.Atoi(strings.SplitN(otherFiles[j], "_", 2)[0])
+
+		if iErr == nil && jErr == nil {
+			return iPrefix < jPrefix
+		}
+		return otherFiles[i] < otherFiles[j]
+	})
+
+	// Combine executed_queries.csv with sorted files
+	sortedFiles := append([]string{"executed_queries.csv"}, otherFiles...)
+
+	// Create a new Excel file
+	f := excelize.NewFile()
+
+	for i, csvFile := range sortedFiles {
+
+		// Open the CSV file
+		file, err := os.Open(csvFile)
+		if err != nil {
+			fmt.Printf("Error opening file %s: %v\n", csvFile, err)
+			continue
+		}
+
+		// Read the CSV file
+		reader := csv.NewReader(file)
+		rows, err := reader.ReadAll()
+		file.Close() // Ensure the file is closed immediately after reading
+		if err != nil {
+			fmt.Printf("Error reading file %s: %v\n", csvFile, err)
+			continue
+		}
+
+		// Create a new sheet with the name of the CSV file (without extension)
+		sheetName := strings.TrimSuffix(csvFile, ".csv")
+		if i == 0 {
+			f.SetSheetName("Sheet1", sheetName)
+		} else {
+			f.NewSheet(sheetName)
+		}
+
+		// Write rows to the sheet
+		for rowIndex, row := range rows {
+			for colIndex, cellValue := range row {
+				cell, _ := excelize.CoordinatesToCellName(colIndex+1, rowIndex+1)
+				f.SetCellValue(sheetName, cell, cellValue)
+			}
+		}
+
+	}
+
+	// Save the Excel file
+	if err := f.SaveAs(excelFileName); err != nil {
+		fmt.Printf("Error saving Excel file: %v\n", err)
+		return
+	}
+
+	// Delete all files in sortedFiles
+	for _, csvFileDelete := range sortedFiles {
+		err := os.Remove(csvFileDelete)
+		if err != nil {
+			fmt.Printf("Error deleting file %s: %v\n", csvFileDelete, err)
+		} else {
+			fmt.Printf("Deleted file: %s\n", csvFileDelete)
+		}
+	}
 }
 
 /*

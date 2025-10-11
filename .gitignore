@@ -42,3 +42,4 @@ config.properties
 
 #Do not commit any csv files these are for the application run
 *.csv
+*.xlsx
