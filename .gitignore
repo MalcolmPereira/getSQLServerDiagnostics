@@ -39,3 +39,6 @@ Thumbs.db
 
 #Do not commit version of config.properties with database information
 config.properties
+
+#Do not commit any csv files these are for the application run
+*.csv
