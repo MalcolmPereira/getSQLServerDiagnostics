@@ -1,0 +1,69 @@
+{	
+	"querysource":{
+		"sqlserververion":"2022",
+		"name":"SQL Server 2022 Diagnostic Information Queries",
+		"author":"Glenn Berry ",
+		"lastmodified":"Last Modified: October 6, 2025",
+		"source":"https://glennsqlperformance.com/",
+		"url":"https://glennsqlperformance.com/ https://sqlserverperformance.wordpress.com/ YouTube: https://bit.ly/2PkoAM1 Blue Sky: https://bsky.app/profile/glennalanberry.bsky.social", 		
+		"comments":"-- Diagnostic Queries are available here -- https://glennsqlperformance.com/resources/ -- YouTube video demonstrating these queries -- https://bit.ly/3aXNDzJ -- Please make sure you are using the correct version of these diagnostic queries for your version of SQL Server -- If you like PowerShell, there is a very useful community solution for running these queries in an automated fashion -- https://dbatools.io/ -- Invoke-DbaDiagnosticQuery -- https://docs.dbatools.io/Invoke-DbaDiagnosticQuery",
+		"copyright":"--****************************************************************************** --*   Copyright (C) 2025 Glenn Berry --*   All rights reserved.  --* --* --*   You may alter this code for your own *non-commercial* purposes. You may --*   republish altered code as long as you include this copyright and give due credit.  --* --* --*   THIS CODE AND INFORMATION ARE PROVIDED 'AS IS' WITHOUT WARRANTY OF --*   ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED  --*   TO THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A --*   PARTICULAR PURPOSE.  --* --*****************************************************************************"
+	},
+	"queries": [
+		{
+			"name": "CheckVersion",
+			"description": "Confirm if the SQL Queries will work for the version of SQL Server",
+			"query": "IF NOT EXISTS (SELECT * WHERE CONVERT(varchar(128), SERVERPROPERTY('ProductMajorVersion')) = '16') BEGIN DECLARE @ProductVersion varchar(128) = CONVERT(varchar(128), SERVERPROPERTY('ProductVersion'));RAISERROR ('Script does not match the ProductVersion [%s] of this instance. Many of these queries may not work on this version.' , 18 , 16 , @ProductVersion);END ELSE PRINT N'You have the correct major version of SQL Server for this diagnostic information script';",
+			"notes":"Confirm if the SQL Queries will work for the version of SQL Server"
+		},
+		{
+			"name": "OSVersion",
+			"description": "SQL and OS Version information for current instance  (Query 1) (Version Info)",
+			"query": "SELECT @@SERVERNAME AS [Server Name], @@VERSION AS [SQL Server and OS Version Info];",
+			"notes":""
+		},
+		{
+			"name": "TotalCores",
+			"description": "Get socket, physical core and logical core count from the SQL Server Error log. (Query 2) (Core Counts)",
+			"query": "EXEC sys.xp_readerrorlog 0, 1, N'detected', N'socket';",
+			"notes":"This query might take a few seconds depending on the size of your error log. This can help you determine the exact core counts used by SQL Server and whether HT is enabled or not.This query will return no results if your error log has been recycled since the instance was last started"
+		},
+		{
+			"name": "SQLServerProperties",
+			"description": "Get selected server properties (Query 3) (Server Properties)",
+			"query": "SELECT SERVERPROPERTY('MachineName') AS [MachineName], SERVERPROPERTY('ServerName') AS [ServerName], SERVERPROPERTY('InstanceName') AS [Instance], SERVERPROPERTY('IsClustered') AS [IsClustered],SERVERPROPERTY('ComputerNamePhysicalNetBIOS') AS [ComputerNamePhysicalNetBIOS],SERVERPROPERTY('Edition') AS [Edition],SERVERPROPERTY('ProductLevel') AS [ProductLevel],SERVERPROPERTY('ProductUpdateLevel') AS [ProductUpdateLevel],SERVERPROPERTY('ProductVersion') AS [ProductVersion],SERVERPROPERTY('ProductMajorVersion') AS [ProductMajorVersion],SERVERPROPERTY('ProductMinorVersion') AS [ProductMinorVersion],SERVERPROPERTY('ProductBuild') AS [ProductBuild],SERVERPROPERTY('ProductBuildType') AS [ProductBuildType],SERVERPROPERTY('ProductUpdateReference') AS [ProductUpdateReference], SERVERPROPERTY('ProcessID') AS [ProcessID],SERVERPROPERTY('Collation') AS [Collation], SERVERPROPERTY('IsFullTextInstalled') AS [IsFullTextInstalled], SERVERPROPERTY('IsIntegratedSecurityOnly') AS [IsIntegratedSecurityOnly],SERVERPROPERTY('FilestreamConfiguredLevel') AS [FilestreamConfiguredLevel],SERVERPROPERTY('IsHadrEnabled') AS [IsHadrEnabled], SERVERPROPERTY('HadrManagerStatus') AS [HadrManagerStatus],SERVERPROPERTY('InstanceDefaultDataPath') AS [InstanceDefaultDataPath],SERVERPROPERTY('InstanceDefaultLogPath') AS [InstanceDefaultLogPath],SERVERPROPERTY('InstanceDefaultBackupPath') AS [InstanceDefaultBackupPath],SERVERPROPERTY('ErrorLogFileName') AS [ErrorLogFileName],SERVERPROPERTY('BuildClrVersion') AS [Build CLR Version],SERVERPROPERTY('IsXTPSupported') AS [IsXTPSupported],SERVERPROPERTY('IsPolybaseInstalled') AS [IsPolybaseInstalled],SERVERPROPERTY('IsAdvancedAnalyticsInstalled') AS [IsRServicesInstalled],SERVERPROPERTY('IsTempdbMetadataMemoryOptimized') AS [IsTempdbMetadataMemoryOptimized],SERVERPROPERTY('IsServerSuspendedForSnapshotBackup') AS [IsServerSuspendedForSnapshotBackup],SERVERPROPERTY('SuspendedDatabaseCount') AS [SuspendedDatabaseCount];",
+			"notes":"This gives you a lot of useful information about your instance of SQL Server,such as the ProcessID for SQL Server and your collation Note: Some columns will be NULL on older SQL Server builds"
+		},
+		{
+			"name": "InstanceLevelConfig",
+			"description": "Get instance-level configuration values for instance  (Query 4) (Configuration Values)",
+			"query": "SELECT name, value, value_in_use, minimum, maximum, [description], is_dynamic, is_advanced FROM sys.configurations WITH (NOLOCK) ORDER BY name OPTION (RECOMPILE);",
+			"notes":"Focus on these settings: automatic soft-NUMA disabled (should be 0 in most cases) backup checksum default (should be 1) backup compression algorithm backup compression default (should be 1 in most cases) clr enabled (only enable if it is needed) cost threshold for parallelism (depends on your workload) lightweight pooling (should be zero) max degree of parallelism (depends on your workload and hardware) max server memory (MB) (set to an appropriate value, not the default) optimize for ad hoc workloads (should be 1) priority boost (should be zero) remote admin connections (should be 1) tempdb metadata memory-optimized (0 by default, some workloads may benefit by enabling)"
+		},
+		{
+			"name": "GlobalTraceFlag",
+			"description": "Returns a list of all global trace flags that are enabled (Query 5) (Global Trace Flags)",
+			"query": "DBCC TRACESTATUS (-1);",
+			"notes":"If no global trace flags are enabled, no results will be returned. It is very useful to know what global trace flags are currently enabled as part of the diagnostic process. Common trace flags that should be enabled in most cases TF 3226 - Suppresses logging of successful database backup messages to the SQL Server Error Log TF 6534 - Enables use of native code to improve performance with spatial data. This is a startup trace flag only TF 7745 - Prevents Query Store data from being written to disk in case of a failover or shutdown command DBCC TRACEON - Trace Flags (Transact-SQL)"
+		},
+		{
+			"name": "ProcessInfo",
+			"description": "SQL Server Process Address space info  (Query 6) (Process Memory)",
+			"query": "SELECT physical_memory_in_use_kb/1024 AS [SQL Server Memory Usage (MB)],locked_page_allocations_kb/1024 AS [SQL Server Locked Pages Allocation (MB)],large_page_allocations_kb/1024 AS [SQL Server Large Pages Allocation (MB)], page_fault_count, memory_utilization_percentage, available_commit_limit_kb, process_physical_memory_low, process_virtual_memory_low FROM sys.dm_os_process_memory WITH (NOLOCK) OPTION (RECOMPILE);",
+			"notes":"Shows whether locked pages is enabled, among other things. You want to see 0 for process_physical_memory_low You want to see 0 for process_virtual_memory_low This indicates that you are not under internal memory pressure If locked_page_allocations_kb > 0, then LPIM is enabled"
+		},
+		{
+			"name": "ServicesInfo",
+			"description": "SQL Server Services information (Query 7) (SQL Server Services Info)",
+			"query": "SELECT servicename, process_id, startup_type_desc, status_desc, last_startup_time, service_account, is_clustered, cluster_nodename, [filename], instant_file_initialization_enabled FROM sys.dm_server_services WITH (NOLOCK) OPTION (RECOMPILE);",
+			"notes":"Tells you the account being used for the SQL Server Service and the SQL Agent Service Shows the process_id, when they were last started, and their current status Also shows whether you are running on a failover cluster instance, and what node you are running on Also shows whether IFI is enabled."
+		},
+		{
+			"name": "OSVersion",
+			"description": "Get version",
+			"query": "SELECT @@SERVERNAME AS server_name, @@VERSION AS version_info;",
+			"notes":"This is useful to find out the version of SQL Server being used."
+		}
+	]
+}
+

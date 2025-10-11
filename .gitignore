@@ -1,0 +1,41 @@
+#Git Ignore File
+
+# Binaries for programs and plugins
+*.exe
+*.dll
+*.so
+*.dylib
+*.wasm
+*.o
+*.cgo1.go
+*.cgo2.c
+*.syso
+
+# Go build cache
+.cache/go-build/
+
+# Dependency caches
+vendor/
+go.mod.sum
+
+# Test binaries
+*_test
+
+# Log files
+*.log
+
+# Editor-specific files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Environment variables
+.env
+.env.*
+
+# Generated files
+/tmp/
+
+#Do not commit version of config.properties with database information
+config.properties
