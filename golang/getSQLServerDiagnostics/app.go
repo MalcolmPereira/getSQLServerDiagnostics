@@ -187,7 +187,12 @@ func executeQuery(db *sql.DB, query string, fileName string) {
 		// Convert the row values to strings for CSV writing
 		row := make([]string, len(columns))
 		for i, val := range values {
-			row[i] = strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", *(val.(*interface{}))), "\n", " "), "\r", " ")
+			v := *(val.(*interface{}))
+			if b, ok := v.([]byte); ok {
+				row[i] = strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", " "), "\r", " ")
+			} else {
+				row[i] = strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", v), "\n", " "), "\r", " ")
+			}
 		}
 
 		// Write the row to the CSV file
@@ -385,6 +390,7 @@ func createExcelFromCSV() {
 			fmt.Printf("Deleted file: %s\n", csvFileDelete)
 		}
 	}
+
 }
 
 /*
