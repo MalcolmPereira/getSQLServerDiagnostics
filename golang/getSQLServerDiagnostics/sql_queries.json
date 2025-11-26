@@ -13,7 +13,7 @@
 		{
 			"name": "CheckVersion",
 			"description": "Confirm if the SQL Queries will work for the version of SQL Server",
-			"query": "IF NOT EXISTS (SELECT * WHERE CONVERT(varchar(128), SERVERPROPERTY('ProductMajorVersion')) = '16') BEGIN DECLARE @ProductVersion varchar(128) = CONVERT(varchar(128), SERVERPROPERTY('ProductVersion'));RAISERROR ('Script does not match the ProductVersion [%s] of this instance. Many of these queries may not work on this version.' , 18 , 16 , @ProductVersion);END ELSE PRINT N'You have the correct major version of SQL Server for this diagnostic information script';",
+			"query": "IF NOT EXISTS (SELECT * WHERE CONVERT(varchar(128), SERVERPROPERTY('ProductMajorVersion')) = '16') BEGIN DECLARE @ProductVersion varchar(128) = CONVERT(varchar(128), SERVERPROPERTY('ProductVersion')); SELECT SERVERPROPERTY('ProductMajorVersion') AS SERVER_VERSION, 'Script does not match the ProductVersion [%s] of this instance. Many of these queries may not work on this version.' AS MESSAGE END SELECT SERVERPROPERTY('ProductMajorVersion') AS SERVER_VERSION, 'Valid Server Version for the script.' AS MESSAGE",
 			"notes":"Confirm if the SQL Queries will work for the version of SQL Server"
 		},
 		{
@@ -43,7 +43,7 @@
 		{
 			"name": "GlobalTraceFlag",
 			"description": "Returns a list of all global trace flags that are enabled (Query 5) (Global Trace Flags)",
-			"query": "DBCC TRACESTATUS (-1);",
+			"query": "DBCC TRACESTATUS(-1);IF @@ROWCOUNT = 0  SELECT 'No trace flags are currently enabled.' AS TRACE_MESSAGE;",
 			"notes":"If no global trace flags are enabled, no results will be returned. It is very useful to know what global trace flags are currently enabled as part of the diagnostic process. Common trace flags that should be enabled in most cases TF 3226 - Suppresses logging of successful database backup messages to the SQL Server Error Log TF 6534 - Enables use of native code to improve performance with spatial data. This is a startup trace flag only TF 7745 - Prevents Query Store data from being written to disk in case of a failover or shutdown command DBCC TRACEON - Trace Flags (Transact-SQL)"
 		},
 		{
@@ -157,7 +157,7 @@
 		{
 			"name": "TempDBDataFilesSizes",
 			"description": "Find unequal tempdb data initial file sizes (Query 27) (Tempdb Data File Sizes)",
-			"query": "EXEC sys.xp_readerrorlog 0, 1, N'The tempdb database data files are not configured with the same initial size';",
+			"query": "SET NOCOUNT ON; EXEC sys.xp_readerrorlog 0, 1, N'The tempdb database data files are not configured with the same initial size'; IF @@ROWCOUNT = 0  SELECT 'No temp db initial file sizes set .' AS MESSAGE;SET NOCOUNT OFF;",
 			"notes":"You want this query to return no results All of your tempdb data files should have the same initial size and autogrowth settings. This query will also return no results if your error log has been recycled since the instance was last started"
 		},
 		{
@@ -293,7 +293,7 @@
 			"notes":"PLE is a good measurement of internal memory pressure Higher PLE is better. Watch the trend over time, not the absolute value This will only return one row for non-NUMA systems."
 		},
 		{
-			"name": "OSVersion",
+			"name": "MemoryGrantsPending",
 			"description": "Memory Grants Pending value for current instance  (Query 50) (Memory Grants Pending)",
 			"query": "SELECT @@SERVERNAME AS [Server Name], RTRIM([object_name]) AS [Object Name], cntr_value AS [Memory Grants Pending] FROM sys.dm_os_performance_counters WITH (NOLOCK) WHERE [object_name] LIKE N'%Memory Manager%' AND counter_name = N'Memory Grants Pending' OPTION (RECOMPILE);",
 			"notes":"Run multiple times, and run periodically if you suspect you are under memory pressure Memory Grants Pending above zero for a sustained period is a very strong indicator of internal memory pressure."
@@ -331,7 +331,7 @@
 		{
 			"name": "LongDurationBufferPoolScans",
 			"description": "Look for long duration buffer pool scans (Query 56) (Long Buffer Pool Scans)",
-			"query": "EXEC sys.xp_readerrorlog 0, 1, N'Buffer pool scan took';",
+			"query": "SET NOCOUNT ON; EXEC sys.xp_readerrorlog 0, 1, N'Buffer pool scan took'; IF @@ROWCOUNT = 0  SELECT 'No Buffer Pool Scan.' AS MESSAGE;SET NOCOUNT OFF;",
 			"notes":"Finds buffer pool scans that took more than 10 seconds in the current SQL Server Error log This should happen much less often in SQL Server 2022."
 		},
 		{
@@ -521,7 +521,7 @@
 			"notes":"Returns the automatic tuning options for this database."
 		},
 		{
-			"name": "OSVersion",
+			"name": "RecentFullBackUp",
 			"description": "Look at recent Full backups for the current database (Query 88) (Recent Full Backups)",
 			"query": "SELECT TOP (30) bs.machine_name, bs.server_name, bs.database_name AS [Database Name], bs.recovery_model,CONVERT (BIGINT, bs.backup_size / 1048576 ) AS [Uncompressed Backup Size (MB)],CONVERT (BIGINT, bs.compressed_backup_size / 1048576 ) AS [Compressed Backup Size (MB)],CONVERT (NUMERIC (20,2), (CONVERT (FLOAT, bs.backup_size) / CONVERT (FLOAT, bs.compressed_backup_size))) AS [Compression Ratio], bs.compression_algorithm, bs.has_backup_checksums, bs.is_copy_only, bs.encryptor_type, DATEDIFF (SECOND, bs.backup_start_date, bs.backup_finish_date) AS [Backup Elapsed Time (sec)], bs.backup_finish_date AS [Backup Finish Date], bmf.physical_device_name AS [Backup Location],  bmf.physical_block_size,  bs.last_valid_restore_time FROM msdb.dbo.backupset AS bs WITH (NOLOCK) INNER JOIN msdb.dbo.backupmediafamily AS bmf WITH (NOLOCK) ON bs.media_set_id = bmf.media_set_id  WHERE bs.database_name = DB_NAME(DB_ID()) AND bs.[type] = 'D' -- Change to L if you want Log backups ORDER BY bs.backup_finish_date DESC OPTION (RECOMPILE);",
 			"notes":"Things to look at: Are your backup sizes and times changing over time? Are you using backup compression? Are you using backup checksums? Are you doing copy_only backups? Are you doing encrypted backups? Have you done any backup tuning with striped backups, or changing the parameters of the backup command? Where are the backups going to? New columns in SQL Server 2022 compression_algorithm and last_valid_restore_time last_valid_restore_time is only valid for transaction log backups"
