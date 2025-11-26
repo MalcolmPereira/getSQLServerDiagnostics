@@ -449,10 +449,82 @@
 			"notes":"Gives you an idea of table sizes, and possible data compression opportunities"
 		},
 		{
+			"name": "GetTableProperties",
+			"description": "Get some key table properties (Query 76) (Table Properties)",
+			"query": "SELECT OBJECT_NAME(t.[object_id]) AS [ObjectName], p.[rows] AS [Table Rows], p.index_id, p.data_compression_desc AS [Index Data Compression], t.create_date, t.lock_on_bulk_load, t.is_replicated, t.has_replication_filter, t.is_tracked_by_cdc, t.lock_escalation_desc, t.is_filetable,  t.is_memory_optimized, t.durability_desc,  t.temporal_type_desc, t.is_remote_data_archive_enabled, t.is_external  FROM sys.tables AS t WITH (NOLOCK) INNER JOIN sys.partitions AS p WITH (NOLOCK) ON t.[object_id] = p.[object_id] WHERE OBJECT_NAME(t.[object_id]) NOT LIKE N'sys%' ORDER BY OBJECT_NAME(t.[object_id]), p.index_id OPTION (RECOMPILE);",
+			"notes":"Gives you some good information about your tables is_memory_optimized and durability_desc were new in SQL Server 2014 temporal_type_desc, is_remote_data_archive_enabled, is_external were new in SQL Server 2016"
+		},
+		{
+			"name": "StatisticsLastUpdated",
+			"description": "When were Statistics last updated on all indexes?  (Query 77) (Statistics Update)",
+			"query": "SELECT SCHEMA_NAME(o.schema_id) + N'.' + o.[name] AS [Object Name], o.[type_desc] AS [Object Type], i.[name] AS [Index Name], STATS_DATE(i.[object_id], i.index_id) AS [Statistics Date], s.auto_created, s.no_recompute, s.user_created, s.is_incremental, s.is_temporary, s.has_persisted_sample, sp.persisted_sample_percent,  (sp.rows_sampled * 100)/sp.rows AS [Actual Sample Percent], sp.modification_counter, st.row_count, st.used_page_count FROM sys.objects AS o WITH (NOLOCK) INNER JOIN sys.indexes AS i WITH (NOLOCK) ON o.[object_id] = i.[object_id] INNER JOIN sys.stats AS s WITH (NOLOCK) ON i.[object_id] = s.[object_id]  AND i.index_id = s.stats_id INNER JOIN sys.dm_db_partition_stats AS st WITH (NOLOCK) ON o.[object_id] = st.[object_id] AND i.[index_id] = st.[index_id] CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp WHERE o.[type] IN ('U', 'V') AND st.row_count > 0 ORDER BY STATS_DATE(i.[object_id], i.index_id) DESC OPTION (RECOMPILE);",
+			"notes":"Helps discover possible problems with out-of-date statistics Also gives you an idea which indexes are the most active."
+		},
+		{
+			"name": "FrequentlyModifiedIndexesStatistics",
+			"description": "Look at most frequently modified indexes and statistics (Query 78) (Volatile Indexes)",
+			"query": "SELECT o.[name] AS [Object Name], o.[object_id], o.[type_desc], s.[name] AS [Statistics Name], s.stats_id, s.no_recompute, s.auto_created, s.is_incremental, s.is_temporary, sp.modification_counter, sp.[rows], sp.rows_sampled, sp.last_updated FROM sys.objects AS o WITH (NOLOCK) INNER JOIN sys.stats AS s WITH (NOLOCK) ON s.object_id = o.object_id CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp WHERE o.[type_desc] NOT IN (N'SYSTEM_TABLE', N'INTERNAL_TABLE') AND sp.modification_counter > 0 ORDER BY sp.modification_counter DESC, o.name OPTION (RECOMPILE);",
+			"notes":"This helps you understand your workload and make better decisions about things like data compression and adding new indexes to a table."
+		},
+		{
+			"name": "GetFragmentation",
+			"description": "Get fragmentation info for all indexes above a certain size in the current database  (Query 79) (Index Fragmentation)",
+			"query": "SELECT DB_NAME(ps.database_id) AS [Database Name], SCHEMA_NAME(o.[schema_id]) AS [Schema Name],OBJECT_NAME(ps.OBJECT_ID) AS [Object Name], i.[name] AS [Index Name], ps.index_id, ps.index_type_desc,  CAST(ps.avg_fragmentation_in_percent AS DECIMAL (15,3)) AS [Avg Fragmentation in Pct],  ps.fragment_count, ps.page_count, i.fill_factor, i.has_filter, i.filter_definition, i.[allow_page_locks] FROM sys.dm_db_index_physical_stats(DB_ID(),NULL, NULL, NULL , N'LIMITED') AS ps INNER JOIN sys.indexes AS i WITH (NOLOCK) ON ps.[object_id] = i.[object_id]  AND ps.index_id = i.index_id INNER JOIN sys.objects AS o WITH (NOLOCK) ON i.[object_id] = o.[object_id] WHERE ps.database_id = DB_ID() AND ps.page_count > 2500 ORDER BY ps.avg_fragmentation_in_percent DESC OPTION (RECOMPILE);",
+			"notes":"Helps determine whether you have fragmentation in your relational indexes and how effective your index maintenance strategy is."
+		},
+		{
+			"name": "IndexReadWrite",
+			"description": "Index Read/Write stats (all tables in current DB) ordered by Reads  (Query 80) (Overall Index Usage - Reads)",
+			"query": "SELECT SCHEMA_NAME(t.[schema_id]) AS [SchemaName], OBJECT_NAME(i.[object_id]) AS [ObjectName], i.[name] AS [IndexName], i.index_id, i.[type_desc] AS [Index Type],s.user_seeks, s.user_scans, s.user_lookups,s.user_seeks + s.user_scans + s.user_lookups AS [Total Reads], s.user_updates AS [Writes],  i.fill_factor AS [Fill Factor], i.has_filter, i.filter_definition, s.last_user_scan, s.last_user_lookup, s.last_user_seek, i.[allow_page_locks] FROM sys.indexes AS i WITH (NOLOCK) LEFT OUTER JOIN sys.dm_db_index_usage_stats AS s WITH (NOLOCK) ON i.[object_id] = s.[object_id] AND i.index_id = s.index_id AND s.database_id = DB_ID() LEFT OUTER JOIN sys.tables AS t WITH (NOLOCK) ON t.[object_id] = i.[object_id] WHERE OBJECTPROPERTY(i.[object_id],'IsUserTable') = 1 ORDER BY s.user_seeks + s.user_scans + s.user_lookups DESC OPTION (RECOMPILE); ",
+			"notes":"Show which indexes in the current database are most active for Reads"
+		},
+		{
 			"name": "OSVersion",
-			"description": "Get version",
-			"query": "SELECT @@SERVERNAME AS server_name, @@VERSION AS version_info;",
-			"notes":"This is useful to find out the version of SQL Server being used."
+			"description": "Index Read/Write stats (all tables in current DB) ordered by Writes  (Query 81) (Overall Index Usage - Writes)",
+			"query": "SELECT SCHEMA_NAME(t.[schema_id]) AS [SchemaName],OBJECT_NAME(i.[object_id]) AS [ObjectName], i.[name] AS [IndexName], i.index_id, i.[type_desc] AS [Index Type], s.user_updates AS [Writes], s.user_seeks + s.user_scans + s.user_lookups AS [Total Reads], i.fill_factor AS [Fill Factor], i.has_filter, i.filter_definition, s.last_system_update, s.last_user_update, i.[allow_page_locks] FROM sys.indexes AS i WITH (NOLOCK) LEFT OUTER JOIN sys.dm_db_index_usage_stats AS s WITH (NOLOCK) ON i.[object_id] = s.[object_id] AND i.index_id = s.index_id AND s.database_id = DB_ID() LEFT OUTER JOIN sys.tables AS t WITH (NOLOCK) ON t.[object_id] = i.[object_id] WHERE OBJECTPROPERTY(i.[object_id],'IsUserTable') = 1 ORDER BY s.user_updates DESC OPTION (RECOMPILE);",
+			"notes":"Show which indexes in the current database are most active for Writes"
+		},
+		{
+			"name": "GetLockWaits",
+			"description": "Get lock waits for current database (Query 82) (Lock Waits)",
+			"query": "SELECT o.name AS [table_name], i.name AS [index_name], ios.index_id, ios.partition_number,SUM(ios.row_lock_wait_count) AS [total_row_lock_waits], SUM(ios.row_lock_wait_in_ms) AS [total_row_lock_wait_in_ms],SUM(ios.index_lock_promotion_attempt_count) AS [total index_lock_promotion_attempt_count],SUM(ios.index_lock_promotion_count) AS [ios.index_lock_promotion_count],SUM(ios.page_lock_wait_count) AS [total_page_lock_waits], SUM(ios.page_lock_wait_in_ms) AS [total_page_lock_wait_in_ms], SUM(ios.page_lock_wait_in_ms)+ SUM(row_lock_wait_in_ms) AS [total_lock_wait_in_ms] FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS ios INNER JOIN sys.objects AS o WITH (NOLOCK) ON ios.[object_id] = o.[object_id] INNER JOIN sys.indexes AS i WITH (NOLOCK) ON ios.[object_id] = i.[object_id] AND ios.index_id = i.index_id WHERE o.[object_id] > 100 GROUP BY o.name, i.name, ios.index_id, ios.partition_number HAVING SUM(ios.page_lock_wait_in_ms) + SUM(row_lock_wait_in_ms) > 0 ORDER BY total_lock_wait_in_ms DESC OPTION (RECOMPILE);",
+			"notes":"This query is helpful for troubleshooting blocking and deadlocking issues"
+		},
+		{
+			"name": "LookAtUDFExecution",
+			"description": "Look at UDF execution statistics (Query 83) (UDF Statistics)",
+			"query": "SELECT OBJECT_NAME(object_id) AS [Function Name], execution_count, total_worker_time, total_worker_time/execution_count AS [avg_worker_time], total_logical_reads, total_physical_reads, total_elapsed_time, total_elapsed_time/execution_count AS [avg_elapsed_time], CONVERT(nvarchar(25), last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), cached_time, 20) AS [Plan Cached Time] FROM sys.dm_exec_function_stats WITH (NOLOCK) WHERE database_id = DB_ID() ORDER BY total_worker_time DESC OPTION (RECOMPILE); ",
+			"notes":"New for SQL Server 2016 Helps you investigate scalar UDF performance issues Does not return information for table valued functions"
+		},
+		{
+			"name": "ScalarUDF",
+			"description": "Determine which scalar UDFs are in-lineable (Query 84) (Inlineable UDFs)",
+			"query": "SELECT OBJECT_NAME(m.object_id) AS [Function Name], m.is_inlineable, m.inline_type, m.is_schema_bound, m.null_on_null_input, efs.total_worker_time, efs.execution_count, efs.cached_time FROM sys.sql_modules AS m WITH (NOLOCK)  LEFT OUTER JOIN sys.dm_exec_function_stats AS efs WITH (NOLOCK) ON  m.object_id = efs.object_id WHERE efs.[type_desc] = N'SQL_SCALAR_FUNCTION' ORDER BY efs.total_worker_time DESC OPTION (RECOMPILE);",
+			"notes":"Scalar UDF Inlining."
+		},
+		{
+			"name": "GetQueryStore",
+			"description": "Get Query Store Options for this database (Query 85) (Query Store Options)",
+			"query": "SELECT actual_state_desc, desired_state_desc, [interval_length_minutes], current_storage_size_mb, [max_storage_size_mb], query_capture_mode_desc, size_based_cleanup_mode_desc, wait_stats_capture_mode_desc FROM sys.database_query_store_options WITH (NOLOCK) OPTION (RECOMPILE);",
+			"notes":"Make sure that the actual_state_desc is the same as desired_state_desc Make sure that the current_storage_size_mb is less than the max_storage_size_mb"
+		},
+		{
+			"name": "GetInputBuffer",
+			"description": "Get input buffer information for the current database (Query 86) (Input Buffer)",
+			"query": "SELECT es.session_id, DB_NAME(es.database_id) AS [Database Name],es.[program_name], es.[host_name], es.login_name,es.login_time, es.cpu_time, es.logical_reads, es.memory_usage,es.[status], ib.event_info AS [Input Buffer] FROM sys.dm_exec_sessions AS es WITH (NOLOCK) CROSS APPLY sys.dm_exec_input_buffer(es.session_id, NULL) AS ib WHERE es.database_id = DB_ID() AND es.is_user_process = 1 OPTION (RECOMPILE);",
+			"notes":"Gives you input buffer information from all non-system sessions for the current database Replaces DBCC INPUTBUFFER."
+		},
+		{
+			"name": "GetDatabaseAutomaticTuning",
+			"description": "Get database automatic tuning options (Query 87) (Automatic Tuning Options)",
+			"query": "SELECT [name], desired_state_desc, actual_state_desc, reason_desc FROM sys.database_automatic_tuning_options WITH (NOLOCK) OPTION (RECOMPILE);",
+			"notes":"Returns the automatic tuning options for this database."
+		},
+		{
+			"name": "OSVersion",
+			"description": "Look at recent Full backups for the current database (Query 88) (Recent Full Backups)",
+			"query": "SELECT TOP (30) bs.machine_name, bs.server_name, bs.database_name AS [Database Name], bs.recovery_model,CONVERT (BIGINT, bs.backup_size / 1048576 ) AS [Uncompressed Backup Size (MB)],CONVERT (BIGINT, bs.compressed_backup_size / 1048576 ) AS [Compressed Backup Size (MB)],CONVERT (NUMERIC (20,2), (CONVERT (FLOAT, bs.backup_size) / CONVERT (FLOAT, bs.compressed_backup_size))) AS [Compression Ratio], bs.compression_algorithm, bs.has_backup_checksums, bs.is_copy_only, bs.encryptor_type, DATEDIFF (SECOND, bs.backup_start_date, bs.backup_finish_date) AS [Backup Elapsed Time (sec)], bs.backup_finish_date AS [Backup Finish Date], bmf.physical_device_name AS [Backup Location],  bmf.physical_block_size,  bs.last_valid_restore_time FROM msdb.dbo.backupset AS bs WITH (NOLOCK) INNER JOIN msdb.dbo.backupmediafamily AS bmf WITH (NOLOCK) ON bs.media_set_id = bmf.media_set_id  WHERE bs.database_name = DB_NAME(DB_ID()) AND bs.[type] = 'D' -- Change to L if you want Log backups ORDER BY bs.backup_finish_date DESC OPTION (RECOMPILE);",
+			"notes":"Things to look at: Are your backup sizes and times changing over time? Are you using backup compression? Are you using backup checksums? Are you doing copy_only backups? Are you doing encrypted backups? Have you done any backup tuning with striped backups, or changing the parameters of the backup command? Where are the backups going to? New columns in SQL Server 2022 compression_algorithm and last_valid_restore_time last_valid_restore_time is only valid for transaction log backups"
 		}
 	]
 }
