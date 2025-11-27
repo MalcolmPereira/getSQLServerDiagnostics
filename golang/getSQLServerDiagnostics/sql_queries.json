@@ -43,7 +43,7 @@
 		{
 			"name": "GlobalTraceFlag",
 			"description": "Returns a list of all global trace flags that are enabled (Query 5) (Global Trace Flags)",
-			"query": "DBCC TRACESTATUS(-1);IF @@ROWCOUNT = 0  SELECT 'No trace flags are currently enabled.' AS TRACE_MESSAGE;",
+			"query": "SET NOCOUNT ON;DBCC TRACESTATUS(-1);IF @@ROWCOUNT = 0  SELECT 'No trace flags are currently enabled.' AS TRACE_MESSAGE;SET NOCOUNT OFF;",
 			"notes":"If no global trace flags are enabled, no results will be returned. It is very useful to know what global trace flags are currently enabled as part of the diagnostic process. Common trace flags that should be enabled in most cases TF 3226 - Suppresses logging of successful database backup messages to the SQL Server Error Log TF 6534 - Enables use of native code to improve performance with spatial data. This is a startup trace flag only TF 7745 - Prevents Query Store data from being written to disk in case of a failover or shutdown command DBCC TRACEON - Trace Flags (Transact-SQL)"
 		},
 		{
@@ -127,7 +127,7 @@
 		{
 			"name": "System Manufacturer",
 			"description": "Get System Manufacturer and model number from SQL Server Error log (Query 19) (System Manufacturer)",
-			"query": "EXEC sys.xp_readerrorlog 0, 1, N'Manufacturer'",
+			"query": "SET NOCOUNT ON;EXEC sys.xp_readerrorlog 0, 1, N'Manufacturer'IF @@ROWCOUNT = 0  SELECT 'No System Manufacturer Details obtained.' AS MESSAGE;SET NOCOUNT OFF;",
 			"notes":"This can help you determine the capabilities and capacities of your database server. Can also be used to confirm if you are running in a VM. This query might take a few seconds if you have not recycled your error log recently. This query will return no results if your error log has been recycled since the instance was started"
 		},
 		{
@@ -215,13 +215,13 @@
 			"notes":"Getting missing index information for all of the databases on the instance is very useful Look at last user seek time, number of user seeks to help determine source and importance Also look at avg_user_impact and avg_total_user_cost to help determine importance SQL Server is overly eager to add included columns, so beware Do not just blindly add indexes that show up from this query!!!"
 		},
 		{
-			"name": "OSVersion",
+			"name": "GetVLFCounts",
 			"description": "Get VLF Counts for all databases on the instance (Query 37) (VLF Counts)",
 			"query": "SELECT [name] AS [Database Name], [VLF Count] FROM sys.databases AS db WITH (NOLOCK) CROSS APPLY (SELECT file_id, COUNT(*) AS [VLF Count] FROM sys.dm_db_log_info(db.database_id) GROUP BY file_id) AS li ORDER BY [VLF Count] DESC OPTION (RECOMPILE);",
 			"notes":"High VLF counts can affect write performance to the log file and they can make full database restores and crash recovery take much longer Try to keep your VLF counts under 200 in most cases (depending on log file size)."
 		},
 		{
-			"name": "GetCPUUtilizationByDatabase ",
+			"name": "GetCPUUtilizationByDatabase",
 			"description": "Get CPU utilization by database (Query 38) (CPU Usage by Database)",
 			"query": "WITH DB_CPU_Stats AS (SELECT pa.DatabaseID, DB_Name(pa.DatabaseID) AS [Database Name], SUM(qs.total_worker_time/1000) AS [CPU_Time_Ms] FROM sys.dm_exec_query_stats AS qs WITH (NOLOCK) CROSS APPLY (SELECT CONVERT(int, value) AS [DatabaseID]  FROM sys.dm_exec_plan_attributes(qs.plan_handle) WHERE attribute = N'dbid') AS pa GROUP BY DatabaseID) SELECT ROW_NUMBER() OVER(ORDER BY [CPU_Time_Ms] DESC) AS [CPU Rank], [Database Name], [CPU_Time_Ms] AS [CPU Time (ms)],  CAST([CPU_Time_Ms] * 1.0 / SUM([CPU_Time_Ms]) OVER() * 100.0 AS DECIMAL(5, 2)) AS [CPU Percent] FROM DB_CPU_Stats WHERE DatabaseID <> 32767 ORDER BY [CPU Rank] OPTION (RECOMPILE);",
 			"notes":"Helps determine which database is using the most CPU resources on the instance Note: This only reflects CPU usage from the currently cached query plans."
@@ -247,7 +247,7 @@
 		{
 			"name": "GetTopWaits",
 			"description": "Isolate top waits for server instance since last restart or wait statistics clear  (Query 42) (Top Waits). Clear Wait Stats with this command, DBCC SQLPERF('sys.dm_os_wait_stats', CLEAR) so you can start clean if need be.",
-			"query": "WITH [Waits] AS (SELECT wait_type, wait_time_ms/ 1000.0 AS [WaitS], (wait_time_ms - signal_wait_time_ms) / 1000.0 AS [ResourceS], signal_wait_time_ms / 1000.0 AS [SignalS], waiting_tasks_count AS [WaitCount], 100.0 *  wait_time_ms / SUM (wait_time_ms) OVER() AS [Percentage], ROW_NUMBER() OVER(ORDER BY wait_time_ms DESC) AS [RowNum] FROM sys.dm_os_wait_stats WITH (NOLOCK) WHERE [wait_type] NOT IN (N'AZURE_IMDS_VERSIONS',N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP',N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE',N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE', N'CXCONSUMER',N'DBMIRROR_DBM_EVENT', N'DBMIRROR_EVENTS_QUEUE', N'DBMIRROR_WORKER_QUEUE',N'DBMIRRORING_CMD', N'DIRTY_PAGE_POLL', N'DISPATCHER_QUEUE_SEMAPHORE',N'EXECSYNC', N'FSAGENT', N'FT_IFTS_SCHEDULER_IDLE_WAIT', N'FT_IFTSHC_MUTEX',N'HADR_CLUSAPI_CALL', N'HADR_FILESTREAM_IOMGR_IOCOMPLETION', N'HADR_LOGCAPTURE_WAIT', N'HADR_NOTIFICATION_DEQUEUE', N'HADR_TIMER_TASK', N'HADR_WORK_QUEUE',N'KSOURCE_WAKEUP', N'LAZYWRITER_SLEEP', N'LOGMGR_QUEUE', N'MEMORY_ALLOCATION_EXT', N'ONDEMAND_TASK_QUEUE',N'PARALLEL_REDO_DRAIN_WORKER', N'PARALLEL_REDO_LOG_CACHE', N'PARALLEL_REDO_TRAN_LIST',N'PARALLEL_REDO_WORKER_SYNC', N'PARALLEL_REDO_WORKER_WAIT_WORK',N'PREEMPTIVE_HADR_LEASE_MECHANISM', N'PREEMPTIVE_SP_SERVER_DIAGNOSTICS',N'PREEMPTIVE_OS_LIBRARYOPS', N'PREEMPTIVE_OS_COMOPS', N'PREEMPTIVE_OS_CRYPTOPS',N'PREEMPTIVE_OS_PIPEOPS', N'PREEMPTIVE_OS_AUTHENTICATIONOPS', N'PREEMPTIVE_OS_GENERICOPS', N'PREEMPTIVE_OS_VERIFYTRUST', N'PREEMPTIVE_OS_DELETESECURITYCONTEXT', N'PREEMPTIVE_OS_REPORTEVENT', N'PREEMPTIVE_OS_FILEOPS', N'PREEMPTIVE_OS_DEVICEOPS', N'PREEMPTIVE_OS_QUERYREGISTRY', N'PREEMPTIVE_OS_WRITEFILE', N'PREEMPTIVE_OS_WRITEFILEGATHER', N'PREEMPTIVE_XE_CALLBACKEXECUTE', N'PREEMPTIVE_XE_DISPATCHER', N'PREEMPTIVE_XE_GETTARGETSTATE', N'PREEMPTIVE_XE_SESSIONCOMMIT', N'PREEMPTIVE_XE_TARGETINIT', N'PREEMPTIVE_XE_TARGETFINALIZE', N'POPULATE_LOCK_ORDINALS', N'PWAIT_ALL_COMPONENTS_INITIALIZED', N'PWAIT_DIRECTLOGCONSUMER_GETNEXT', N'PWAIT_EXTENSIBILITY_CLEANUP_TASK', N'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP', N'QDS_ASYNC_QUEUE', N'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP', N'REQUEST_FOR_DEADLOCK_SEARCH', N'RESOURCE_QUEUE', N'SERVER_IDLE_CHECK', N'SLEEP_BPOOL_FLUSH', N'SLEEP_DBSTARTUP', N'SLEEP_DCOMSTARTUP', N'SLEEP_MASTERDBREADY', N'SLEEP_MASTERMDREADY', N'SLEEP_MASTERUPGRADED', N'SLEEP_MSDBSTARTUP', N'SLEEP_SYSTEMTASK', N'SLEEP_TASK', N'SLEEP_TEMPDBSTARTUP', N'SNI_HTTP_ACCEPT', N'SOS_WORK_DISPATCHER', N'SP_SERVER_DIAGNOSTICS_SLEEP', N'SOS_WORKER_MIGRATION', N'VDI_CLIENT_OTHER', N'SQLTRACE_BUFFER_FLUSH', N'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', N'SQLTRACE_WAIT_ENTRIES', N'STARTUP_DEPENDENCY_MANAGER', N'WAIT_FOR_RESULTS', N'WAITFOR', N'WAITFOR_TASKSHUTDOWN', N'WAIT_XTP_HOST_WAIT', N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG', N'WAIT_XTP_CKPT_CLOSE', N'WAIT_XTP_RECOVERY', N'XE_BUFFERMGR_ALLPROCESSED_EVENT', N'XE_DISPATCHER_JOIN', N'XE_DISPATCHER_WAIT', N'XE_LIVE_TARGET_TVF', N'XE_TIMER_EVENT') AND waiting_tasks_count > 0) SELECT MAX (W1.wait_type) AS [WaitType], CAST (MAX (W1.Percentage) AS DECIMAL (5,2)) AS [Wait Percentage], CAST ((MAX (W1.WaitS) / MAX (W1.WaitCount)) AS DECIMAL (16,4)) AS [AvgWait_Sec], CAST ((MAX (W1.ResourceS) / MAX (W1.WaitCount)) AS DECIMAL (16,4)) AS [AvgRes_Sec], CAST ((MAX (W1.SignalS) / MAX (W1.WaitCount)) AS DECIMAL (16,4)) AS [AvgSig_Sec],  CAST (MAX (W1.WaitS) AS DECIMAL (16,2)) AS [Wait_Sec], CAST (MAX (W1.ResourceS) AS DECIMAL (16,2)) AS [Resource_Sec], CAST (MAX (W1.SignalS) AS DECIMAL (16,2)) AS [Signal_Sec], MAX (W1.WaitCount) AS [Wait Count], CAST (N'https://www.sqlskills.com/help/waits/' + W1.wait_type AS XML) AS [Help/Info URL] FROM Waits AS W1 INNER JOIN Waits AS W2 ON W2.RowNum <= W1.RowNum GROUP BY W1.RowNum, W1.wait_type HAVING SUM (W2.Percentage) - MAX (W1.Percentage) < 99 -- percentage threshold OPTION (RECOMPILE);",
+			"query": "WITH [Waits] AS (SELECT wait_type, wait_time_ms/ 1000.0 AS [WaitS], (wait_time_ms - signal_wait_time_ms) / 1000.0 AS [ResourceS], signal_wait_time_ms / 1000.0 AS [SignalS], waiting_tasks_count AS [WaitCount], 100.0 *  wait_time_ms / SUM (wait_time_ms) OVER() AS [Percentage], ROW_NUMBER() OVER(ORDER BY wait_time_ms DESC) AS [RowNum] FROM sys.dm_os_wait_stats WITH (NOLOCK) WHERE [wait_type] NOT IN ( N'AZURE_IMDS_VERSIONS', N'BROKER_EVENTHANDLER', N'BROKER_RECEIVE_WAITFOR', N'BROKER_TASK_STOP', N'BROKER_TO_FLUSH', N'BROKER_TRANSMITTER', N'CHECKPOINT_QUEUE', N'CHKPT', N'CLR_AUTO_EVENT', N'CLR_MANUAL_EVENT', N'CLR_SEMAPHORE', N'CXCONSUMER', N'DBMIRROR_DBM_EVENT', N'DBMIRROR_EVENTS_QUEUE', N'DBMIRROR_WORKER_QUEUE', N'DBMIRRORING_CMD', N'DIRTY_PAGE_POLL', N'DISPATCHER_QUEUE_SEMAPHORE', N'EXECSYNC', N'FSAGENT', N'FT_IFTS_SCHEDULER_IDLE_WAIT', N'FT_IFTSHC_MUTEX', N'HADR_CLUSAPI_CALL', N'HADR_FILESTREAM_IOMGR_IOCOMPLETION', N'HADR_LOGCAPTURE_WAIT',  N'HADR_NOTIFICATION_DEQUEUE', N'HADR_TIMER_TASK', N'HADR_WORK_QUEUE', N'KSOURCE_WAKEUP', N'LAZYWRITER_SLEEP', N'LOGMGR_QUEUE',  N'MEMORY_ALLOCATION_EXT', N'ONDEMAND_TASK_QUEUE', N'PARALLEL_REDO_DRAIN_WORKER', N'PARALLEL_REDO_LOG_CACHE', N'PARALLEL_REDO_TRAN_LIST', N'PARALLEL_REDO_WORKER_SYNC', N'PARALLEL_REDO_WORKER_WAIT_WORK', N'PREEMPTIVE_HADR_LEASE_MECHANISM', N'PREEMPTIVE_SP_SERVER_DIAGNOSTICS', N'PREEMPTIVE_OS_LIBRARYOPS', N'PREEMPTIVE_OS_COMOPS', N'PREEMPTIVE_OS_CRYPTOPS', N'PREEMPTIVE_OS_PIPEOPS', N'PREEMPTIVE_OS_AUTHENTICATIONOPS', N'PREEMPTIVE_OS_GENERICOPS', N'PREEMPTIVE_OS_VERIFYTRUST', N'PREEMPTIVE_OS_DELETESECURITYCONTEXT', N'PREEMPTIVE_OS_REPORTEVENT', N'PREEMPTIVE_OS_FILEOPS', N'PREEMPTIVE_OS_DEVICEOPS', N'PREEMPTIVE_OS_QUERYREGISTRY', N'PREEMPTIVE_OS_WRITEFILE', N'PREEMPTIVE_OS_WRITEFILEGATHER', N'PREEMPTIVE_XE_CALLBACKEXECUTE', N'PREEMPTIVE_XE_DISPATCHER', N'PREEMPTIVE_XE_GETTARGETSTATE', N'PREEMPTIVE_XE_SESSIONCOMMIT', N'PREEMPTIVE_XE_TARGETINIT', N'PREEMPTIVE_XE_TARGETFINALIZE', N'POPULATE_LOCK_ORDINALS', N'PWAIT_ALL_COMPONENTS_INITIALIZED', N'PWAIT_DIRECTLOGCONSUMER_GETNEXT', N'PWAIT_EXTENSIBILITY_CLEANUP_TASK', N'QDS_PERSIST_TASK_MAIN_LOOP_SLEEP', N'QDS_ASYNC_QUEUE', N'QDS_CLEANUP_STALE_QUERIES_TASK_MAIN_LOOP_SLEEP', N'REQUEST_FOR_DEADLOCK_SEARCH', N'RESOURCE_QUEUE', N'SERVER_IDLE_CHECK', N'SLEEP_BPOOL_FLUSH', N'SLEEP_DBSTARTUP', N'SLEEP_DCOMSTARTUP', N'SLEEP_MASTERDBREADY', N'SLEEP_MASTERMDREADY', N'SLEEP_MASTERUPGRADED', N'SLEEP_MSDBSTARTUP', N'SLEEP_SYSTEMTASK', N'SLEEP_TASK', N'SLEEP_TEMPDBSTARTUP', N'SNI_HTTP_ACCEPT', N'SOS_WORK_DISPATCHER', N'SP_SERVER_DIAGNOSTICS_SLEEP', N'SOS_WORKER_MIGRATION', N'VDI_CLIENT_OTHER', N'SQLTRACE_BUFFER_FLUSH', N'SQLTRACE_INCREMENTAL_FLUSH_SLEEP', N'SQLTRACE_WAIT_ENTRIES', N'STARTUP_DEPENDENCY_MANAGER', N'WAIT_FOR_RESULTS', N'WAITFOR', N'WAITFOR_TASKSHUTDOWN', N'WAIT_XTP_HOST_WAIT', N'WAIT_XTP_OFFLINE_CKPT_NEW_LOG', N'WAIT_XTP_CKPT_CLOSE', N'WAIT_XTP_RECOVERY', N'XE_BUFFERMGR_ALLPROCESSED_EVENT', N'XE_DISPATCHER_JOIN', N'XE_DISPATCHER_WAIT', N'XE_LIVE_TARGET_TVF', N'XE_TIMER_EVENT') AND waiting_tasks_count > 0) SELECT MAX (W1.wait_type) AS [WaitType], CAST (MAX (W1.Percentage) AS DECIMAL (5,2)) AS [Wait Percentage], CAST ((MAX (W1.WaitS) / MAX (W1.WaitCount)) AS DECIMAL (16,4)) AS [AvgWait_Sec], CAST ((MAX (W1.ResourceS) / MAX (W1.WaitCount)) AS DECIMAL (16,4)) AS [AvgRes_Sec], CAST ((MAX (W1.SignalS) / MAX (W1.WaitCount)) AS DECIMAL (16,4)) AS [AvgSig_Sec],  CAST (MAX (W1.WaitS) AS DECIMAL (16,2)) AS [Wait_Sec], CAST (MAX (W1.ResourceS) AS DECIMAL (16,2)) AS [Resource_Sec], CAST (MAX (W1.SignalS) AS DECIMAL (16,2)) AS [Signal_Sec], MAX (W1.WaitCount) AS [Wait Count], CAST (N'https://www.sqlskills.com/help/waits/' + W1.wait_type AS XML) AS [Help/Info URL] FROM Waits AS W1 INNER JOIN Waits AS W2 ON W2.RowNum <= W1.RowNum GROUP BY W1.RowNum, W1.wait_type HAVING SUM (W2.Percentage) - MAX (W1.Percentage) < 99  OPTION (RECOMPILE);",
 			"notes":"Cumulative wait stats are not as useful on an idle instance that is not under load or performance pressure."
 		},
 		{
@@ -347,13 +347,13 @@
 			"notes":"Look at log file size and usage, along with the log reuse wait description for the current database"
 		},
 		{
-			"name": "LastVLFForCurrentDatabase ",
+			"name": "LastVLFForCurrentDatabase",
 			"description": "Status of last VLF for current database  (Query 59) (Last VLF Status)",
 			"query": "SELECT TOP(1) DB_NAME(li.database_id) AS [Database Name], li.[file_id], li.vlf_size_mb, li.vlf_sequence_number, li.vlf_active, li.vlf_status FROM sys.dm_db_log_info(DB_ID()) AS li ORDER BY vlf_sequence_number DESC OPTION (RECOMPILE);",
 			"notes":"Determine whether you will be able to shrink the transaction log file vlf_status Values 0 is inactive 1 is initialized but unused  2 is active."
 		},
 		{
-			"name": "GetDatabaseScopedConfiguration",
+			"name": "DBScopedConfiguration",
 			"description": "Get database scoped configuration values for current database (Query 60) (Database-scoped Configurations)",
 			"query": "SELECT configuration_id, name, [value] AS [value_for_primary], value_for_secondary, is_value_default FROM sys.database_scoped_configurations WITH (NOLOCK) OPTION (RECOMPILE);",
 			"notes":"Get database scoped configuration values for current database"
@@ -365,43 +365,43 @@
 			"notes":"This helps you characterize your workload better from an I/O perspective for this database It helps you determine whether you have an OLTP or DW/DSS type of workload."
 		},
 		{
-			"name": "GetMostFrequentlyExecutedQueries",
+			"name": "MostFreqExec",
 			"description": "Get most frequently executed queries for this database (Query 62) (Query Execution Counts)",
 			"query": "SELECT TOP(50) LEFT(t.[text], 50) AS [Short Query Text], qs.execution_count AS [Execution Count],ISNULL(qs.execution_count/DATEDIFF(Minute, qs.creation_time, GETDATE()), 0) AS [Calls/Minute],qs.total_logical_reads AS [Total Logical Reads],qs.total_logical_reads/qs.execution_count AS [Avg Logical Reads],qs.total_worker_time AS [Total Worker Time],qs.total_worker_time/qs.execution_count AS [Avg Worker Time], qs.total_elapsed_time AS [Total Elapsed Time],qs.total_elapsed_time/qs.execution_count AS [Avg Elapsed Time],CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index], qs.last_execution_time AS [Last Execution Time], qs.creation_time AS [Creation Time] ,t.[text] AS [Complete Query Text], qp.query_plan AS [Query Plan] FROM sys.dm_exec_query_stats AS qs WITH (NOLOCK) CROSS APPLY sys.dm_exec_sql_text(plan_handle) AS t CROSS APPLY sys.dm_exec_query_plan(plan_handle) AS qp WHERE t.dbid = DB_ID() AND DATEDIFF(Minute, qs.creation_time, GETDATE()) > 0 ORDER BY qs.execution_count DESC OPTION (RECOMPILE);",
 			"notes":"Tells you which cached queries are called the most often This helps you characterize and baseline your workload It also helps you find possible caching opportunities"
 		},
 		{
-			"name": "TopCachedSPByExecution",
+			"name": "TopCachedSP",
 			"description": "Top Cached SPs By Execution Count (Query 63) (SP Execution Counts)",
 			"query": "SELECT TOP(100) CONCAT(SCHEMA_NAME(p.schema_id), '.', p.name) AS [SP Name], qs.execution_count AS [Execution Count],ISNULL(qs.execution_count/DATEDIFF(Minute, qs.cached_time, GETDATE()), 0) AS [Calls/Minute], qs.total_elapsed_time/NULLIF(qs.execution_count, 0) AS [Avg Elapsed Time], qs.total_worker_time/NULLIF(qs.execution_count, 0) AS [Avg Worker Time], qs.total_logical_reads/NULLIF(qs.execution_count, 0) AS [Avg Logical Reads], CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index], CONVERT(nvarchar(25), qs.last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), qs.cached_time, 20) AS [Plan Cached Time] ,qp.query_plan AS [Query Plan] FROM sys.procedures AS p WITH (NOLOCK) INNER JOIN sys.dm_exec_procedure_stats AS qs WITH (NOLOCK) ON p.[object_id] = qs.[object_id] CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) AS qp WHERE qs.database_id = DB_ID() AND DATEDIFF(Minute, qs.cached_time, GETDATE()) > 0 ORDER BY qs.execution_count DESC OPTION (RECOMPILE);",
 			"notes":"Tells you which cached stored procedures are called the most often This helps you characterize and baseline your workload It also helps you find possible caching opportunities."
 		},
 		{
-			"name": "TopCachedSPByAvgElapsedTime",
+			"name": "TopCachedSPAvgElapsed",
 			"description": "Top Cached SPs By Avg Elapsed Time (Query 64) (SP Avg Elapsed Time)",
 			"query": "SELECT TOP(25) CONCAT(SCHEMA_NAME(p.schema_id), '.', p.name) AS [SP Name], qs.min_elapsed_time, qs.total_elapsed_time/qs.execution_count AS [avg_elapsed_time], qs.max_elapsed_time, qs.last_elapsed_time, qs.total_elapsed_time, qs.execution_count, ISNULL(qs.execution_count/DATEDIFF(Minute, qs.cached_time, GETDATE()), 0) AS [Calls/Minute], qs.total_worker_time/qs.execution_count AS [AvgWorkerTime], qs.total_worker_time AS [TotalWorkerTime],CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index], CONVERT(nvarchar(25), qs.last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), qs.cached_time, 20) AS [Plan Cached Time] ,qp.query_plan AS [Query Plan] FROM sys.procedures AS p WITH (NOLOCK) INNER JOIN sys.dm_exec_procedure_stats AS qs WITH (NOLOCK) ON p.[object_id] = qs.[object_id] CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) AS qp WHERE qs.database_id = DB_ID() AND DATEDIFF(Minute, qs.cached_time, GETDATE()) > 0 ORDER BY avg_elapsed_time DESC OPTION (RECOMPILE);",
 			"notes":"This helps you find high average elapsed time cached stored procedures that may be easy to optimize with standard query tuning techniques."
 		},
-		{
+				{
 			"name": "TopCachedSPByWorkerTime",
 			"description": "Top Cached SPs By Total Worker time. Worker time relates to CPU cost  (Query 65) (SP Worker Time)",
 			"query": "SELECT TOP(25) CONCAT(SCHEMA_NAME(p.schema_id), '.', p.name) AS [SP Name], qs.total_worker_time AS [TotalWorkerTime],  qs.total_worker_time/qs.execution_count AS [AvgWorkerTime], qs.execution_count,  ISNULL(qs.execution_count/DATEDIFF(Minute, qs.cached_time, GETDATE()), 0) AS [Calls/Minute], qs.total_elapsed_time, qs.total_elapsed_time/qs.execution_count AS [avg_elapsed_time], CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index], CONVERT(nvarchar(25), qs.last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), qs.cached_time, 20) AS [Plan Cached Time] ,qp.query_plan AS [Query Plan] FROM sys.procedures AS p WITH (NOLOCK) INNER JOIN sys.dm_exec_procedure_stats AS qs WITH (NOLOCK) ON p.[object_id] = qs.[object_id] CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) AS qp WHERE qs.database_id = DB_ID() AND DATEDIFF(Minute, qs.cached_time, GETDATE()) > 0 ORDER BY qs.total_worker_time DESC OPTION (RECOMPILE);",
 			"notes":"This helps you find the most expensive cached stored procedures from a CPU perspective You should look at this if you see signs of CPU pressure"
 		},
 		{
-			"name": "TopCachedSPByTotalLogicalReads",
+			"name": "TopCachedSPLogicalReads",
 			"description": "Top Cached SPs By Total Logical Reads. Logical reads relate to memory pressure  (Query 66) (SP Logical Reads)",
 			"query": "SELECT TOP(25) CONCAT(SCHEMA_NAME(p.schema_id), '.', p.name) AS [SP Name], qs.total_logical_reads AS [TotalLogicalReads], qs.total_logical_reads/qs.execution_count AS [AvgLogicalReads],qs.execution_count, ISNULL(qs.execution_count/DATEDIFF(Minute, qs.cached_time, GETDATE()), 0) AS [Calls/Minute], qs.total_elapsed_time, qs.total_elapsed_time/qs.execution_count AS [avg_elapsed_time], CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index], CONVERT(nvarchar(25), qs.last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), qs.cached_time, 20) AS [Plan Cached Time] ,qp.query_plan AS [Query Plan] FROM sys.procedures AS p WITH (NOLOCK) INNER JOIN sys.dm_exec_procedure_stats AS qs WITH (NOLOCK) ON p.[object_id] = qs.[object_id] CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) AS qp WHERE qs.database_id = DB_ID() AND DATEDIFF(Minute, qs.cached_time, GETDATE()) > 0 ORDER BY qs.total_logical_reads DESC OPTION (RECOMPILE);",
 			"notes":"This helps you find the most expensive cached stored procedures from a memory perspective You should look at this if you see signs of memory pressure"
 		},
 		{
-			"name": "TopCachedSPByTotalPhysicalReads",
+			"name": "TopCachedSPByPhysicalReads",
 			"description": "Top Cached SPs By Total Physical Reads. Physical reads relate to disk read I/O pressure  (Query 67) (SP Physical Reads)",
 			"query": "SELECT TOP(25) CONCAT(SCHEMA_NAME(p.schema_id), '.', p.name) AS [SP Name], qs.total_physical_reads AS [TotalPhysicalReads],  qs.total_physical_reads/qs.execution_count AS [AvgPhysicalReads], qs.execution_count,  qs.total_logical_reads,qs.total_elapsed_time, qs.total_elapsed_time/qs.execution_count AS [avg_elapsed_time], CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index], CONVERT(nvarchar(25), qs.last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), qs.cached_time, 20) AS [Plan Cached Time] ,qp.query_plan AS [Query Plan] FROM sys.procedures AS p WITH (NOLOCK) INNER JOIN sys.dm_exec_procedure_stats AS qs WITH (NOLOCK) ON p.[object_id] = qs.[object_id] CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) AS qp WHERE qs.database_id = DB_ID() AND qs.total_physical_reads > 0 ORDER BY qs.total_physical_reads DESC, qs.total_logical_reads DESC OPTION (RECOMPILE);",
 			"notes":"This helps you find the most expensive cached stored procedures from a read I/O perspective You should look at this if you see signs of I/O pressure or of memory pressure."
 		},
 		{
-			"name": "TopCachedSPByTotalLogicalWrites",
+			"name": "TopCachedSPTotalWrites",
 			"description": "Top Cached SPs By Total Logical Writes (Query 68) (SP Logical Writes) Logical writes relate to both memory and disk I/O pressure ",
 			"query": "SELECT TOP(25) CONCAT(SCHEMA_NAME(p.schema_id), '.', p.name) AS [SP Name], qs.total_logical_writes AS [TotalLogicalWrites], qs.total_logical_writes/qs.execution_count AS [AvgLogicalWrites], qs.execution_count, ISNULL(qs.execution_count/DATEDIFF(Minute, qs.cached_time, GETDATE()), 0) AS [Calls/Minute], qs.total_elapsed_time, qs.total_elapsed_time/qs.execution_count AS [avg_elapsed_time], CASE WHEN CONVERT(nvarchar(max), qp.query_plan) COLLATE Latin1_General_BIN2 LIKE N'%<MissingIndexes>%' THEN 1 ELSE 0 END AS [Has Missing Index],  CONVERT(nvarchar(25), qs.last_execution_time, 20) AS [Last Execution Time], CONVERT(nvarchar(25), qs.cached_time, 20) AS [Plan Cached Time] ,qp.query_plan AS [Query Plan]  FROM sys.procedures AS p WITH (NOLOCK) INNER JOIN sys.dm_exec_procedure_stats AS qs WITH (NOLOCK) ON p.[object_id] = qs.[object_id] CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) AS qp WHERE qs.database_id = DB_ID() AND qs.total_logical_writes > 0 AND DATEDIFF(Minute, qs.cached_time, GETDATE()) > 0 ORDER BY qs.total_logical_writes DESC OPTION (RECOMPILE);",
 			"notes":"This helps you find the most expensive cached stored procedures from a write I/O perspective You should look at this if you see signs of I/O pressure or of memory pressure"
@@ -425,7 +425,7 @@
 			"notes":"Look for indexes with high numbers of writes and zero or very low numbers of reads Consider your complete workload, and how long your instance has been running Investigate further before dropping an index."
 		},
 		{
-			"name": "MissingIndexes",
+			"name": "MissingDBIndices",
 			"description": "Missing Indexes for current database by Index Advantage  (Query 72) (Missing Indexes)",
 			"query": "SELECT CONVERT(decimal(18,2), migs.user_seeks * migs.avg_total_user_cost * (migs.avg_user_impact * 0.01)) AS [Index Advantage], CONVERT(nvarchar(25), migs.last_user_seek, 20) AS [Last User Seek], mid.[statement] AS [Database.Schema.Table], COUNT(1) OVER(PARTITION BY mid.[statement]) AS [missing_indexes_for_table], COUNT(1) OVER(PARTITION BY mid.[statement], mid.equality_columns) AS [similar_missing_indexes_for_table],  mid.equality_columns, mid.inequality_columns, mid.included_columns, migs.user_seeks,  CONVERT(decimal(18,2), migs.avg_total_user_cost) AS [Avg Total User Cost],  CONVERT(decimal(18,2), migs.avg_user_impact) AS [Avg User Impact], REPLACE(REPLACE(LEFT(st.[text], 512), CHAR(10),''), CHAR(13),'') AS [Short Query Text], OBJECT_NAME(mid.[object_id]) AS [Table Name], p.[rows] AS [Table Rows] FROM sys.dm_db_missing_index_groups AS mig WITH (NOLOCK) INNER JOIN sys.dm_db_missing_index_group_stats_query AS migs WITH(NOLOCK) ON mig.index_group_handle = migs.group_handle CROSS APPLY sys.dm_exec_sql_text(migs.last_sql_handle) AS st INNER JOIN sys.dm_db_missing_index_details AS mid WITH (NOLOCK)  ON mig.index_handle = mid.index_handle INNER JOIN sys.partitions AS p WITH (NOLOCK) ON p.[object_id] = mid.[object_id] WHERE mid.database_id = DB_ID() AND p.index_id < 2 ORDER BY [Index Advantage] DESC OPTION (RECOMPILE);",
 			"notes":"This is useful to find out the version of SQL Server being used."
@@ -437,7 +437,7 @@
 			"notes":"Helps you connect missing indexes to specific stored procedures or queries This can help you decide whether to add them or not"
 		},
 		{
-			"name": "CurrentDatabaseByObject ",
+			"name": "CurrentDatabaseByObject",
 			"description": "Breaks down buffers used by current database by object (table, index) in the buffer cache  (Query 74) (Buffer Usage). This query could take some time on a busy instance",
 			"query": "SELECT fg.name AS [Filegroup Name], SCHEMA_NAME(o.schema_id) AS [Schema Name],OBJECT_NAME(p.[object_id]) AS [Object Name], p.index_id, CAST(COUNT(*)/128.0 AS DECIMAL(10, 2)) AS [Buffer size(MB)], COUNT(*) AS [BufferCount], p.[rows] AS [Row Count], p.data_compression_desc AS [Compression Type] FROM sys.allocation_units AS a WITH (NOLOCK) INNER JOIN sys.dm_os_buffer_descriptors AS b WITH (NOLOCK) ON a.allocation_unit_id = b.allocation_unit_id INNER JOIN sys.partitions AS p WITH (NOLOCK) ON a.container_id = p.hobt_id INNER JOIN sys.objects AS o WITH (NOLOCK) ON p.object_id = o.object_id INNER JOIN sys.database_files AS f WITH (NOLOCK) ON b.file_id = f.file_id INNER JOIN sys.filegroups AS fg WITH (NOLOCK) ON f.data_space_id = fg.data_space_id WHERE b.database_id = CONVERT(int, DB_ID()) AND p.[object_id] > 100 AND OBJECT_NAME(p.[object_id]) NOT LIKE N'plan_%' AND OBJECT_NAME(p.[object_id]) NOT LIKE N'sys%' AND OBJECT_NAME(p.[object_id]) NOT LIKE N'xml_index_nodes%' GROUP BY fg.name, o.schema_id, p.[object_id], p.index_id,  p.data_compression_desc, p.[rows] ORDER BY [BufferCount] DESC OPTION (RECOMPILE);",
 			"notes":"Tells you what tables and indexes are using the most memory in the buffer cache It can help identify possible candidates for data compression."
@@ -461,7 +461,7 @@
 			"notes":"Helps discover possible problems with out-of-date statistics Also gives you an idea which indexes are the most active."
 		},
 		{
-			"name": "FrequentlyModifiedIndexesStatistics",
+			"name": "FreqIndexesStatistics",
 			"description": "Look at most frequently modified indexes and statistics (Query 78) (Volatile Indexes)",
 			"query": "SELECT o.[name] AS [Object Name], o.[object_id], o.[type_desc], s.[name] AS [Statistics Name], s.stats_id, s.no_recompute, s.auto_created, s.is_incremental, s.is_temporary, sp.modification_counter, sp.[rows], sp.rows_sampled, sp.last_updated FROM sys.objects AS o WITH (NOLOCK) INNER JOIN sys.stats AS s WITH (NOLOCK) ON s.object_id = o.object_id CROSS APPLY sys.dm_db_stats_properties(s.object_id, s.stats_id) AS sp WHERE o.[type_desc] NOT IN (N'SYSTEM_TABLE', N'INTERNAL_TABLE') AND sp.modification_counter > 0 ORDER BY sp.modification_counter DESC, o.name OPTION (RECOMPILE);",
 			"notes":"This helps you understand your workload and make better decisions about things like data compression and adding new indexes to a table."
@@ -473,13 +473,13 @@
 			"notes":"Helps determine whether you have fragmentation in your relational indexes and how effective your index maintenance strategy is."
 		},
 		{
-			"name": "IndexReadWrite",
+			"name": "IndexReadWrite-Read",
 			"description": "Index Read/Write stats (all tables in current DB) ordered by Reads  (Query 80) (Overall Index Usage - Reads)",
 			"query": "SELECT SCHEMA_NAME(t.[schema_id]) AS [SchemaName], OBJECT_NAME(i.[object_id]) AS [ObjectName], i.[name] AS [IndexName], i.index_id, i.[type_desc] AS [Index Type],s.user_seeks, s.user_scans, s.user_lookups,s.user_seeks + s.user_scans + s.user_lookups AS [Total Reads], s.user_updates AS [Writes],  i.fill_factor AS [Fill Factor], i.has_filter, i.filter_definition, s.last_user_scan, s.last_user_lookup, s.last_user_seek, i.[allow_page_locks] FROM sys.indexes AS i WITH (NOLOCK) LEFT OUTER JOIN sys.dm_db_index_usage_stats AS s WITH (NOLOCK) ON i.[object_id] = s.[object_id] AND i.index_id = s.index_id AND s.database_id = DB_ID() LEFT OUTER JOIN sys.tables AS t WITH (NOLOCK) ON t.[object_id] = i.[object_id] WHERE OBJECTPROPERTY(i.[object_id],'IsUserTable') = 1 ORDER BY s.user_seeks + s.user_scans + s.user_lookups DESC OPTION (RECOMPILE); ",
 			"notes":"Show which indexes in the current database are most active for Reads"
 		},
 		{
-			"name": "OSVersion",
+			"name": "IndexReadWrite-Writes",
 			"description": "Index Read/Write stats (all tables in current DB) ordered by Writes  (Query 81) (Overall Index Usage - Writes)",
 			"query": "SELECT SCHEMA_NAME(t.[schema_id]) AS [SchemaName],OBJECT_NAME(i.[object_id]) AS [ObjectName], i.[name] AS [IndexName], i.index_id, i.[type_desc] AS [Index Type], s.user_updates AS [Writes], s.user_seeks + s.user_scans + s.user_lookups AS [Total Reads], i.fill_factor AS [Fill Factor], i.has_filter, i.filter_definition, s.last_system_update, s.last_user_update, i.[allow_page_locks] FROM sys.indexes AS i WITH (NOLOCK) LEFT OUTER JOIN sys.dm_db_index_usage_stats AS s WITH (NOLOCK) ON i.[object_id] = s.[object_id] AND i.index_id = s.index_id AND s.database_id = DB_ID() LEFT OUTER JOIN sys.tables AS t WITH (NOLOCK) ON t.[object_id] = i.[object_id] WHERE OBJECTPROPERTY(i.[object_id],'IsUserTable') = 1 ORDER BY s.user_updates DESC OPTION (RECOMPILE);",
 			"notes":"Show which indexes in the current database are most active for Writes"
@@ -490,6 +490,7 @@
 			"query": "SELECT o.name AS [table_name], i.name AS [index_name], ios.index_id, ios.partition_number,SUM(ios.row_lock_wait_count) AS [total_row_lock_waits], SUM(ios.row_lock_wait_in_ms) AS [total_row_lock_wait_in_ms],SUM(ios.index_lock_promotion_attempt_count) AS [total index_lock_promotion_attempt_count],SUM(ios.index_lock_promotion_count) AS [ios.index_lock_promotion_count],SUM(ios.page_lock_wait_count) AS [total_page_lock_waits], SUM(ios.page_lock_wait_in_ms) AS [total_page_lock_wait_in_ms], SUM(ios.page_lock_wait_in_ms)+ SUM(row_lock_wait_in_ms) AS [total_lock_wait_in_ms] FROM sys.dm_db_index_operational_stats(DB_ID(), NULL, NULL, NULL) AS ios INNER JOIN sys.objects AS o WITH (NOLOCK) ON ios.[object_id] = o.[object_id] INNER JOIN sys.indexes AS i WITH (NOLOCK) ON ios.[object_id] = i.[object_id] AND ios.index_id = i.index_id WHERE o.[object_id] > 100 GROUP BY o.name, i.name, ios.index_id, ios.partition_number HAVING SUM(ios.page_lock_wait_in_ms) + SUM(row_lock_wait_in_ms) > 0 ORDER BY total_lock_wait_in_ms DESC OPTION (RECOMPILE);",
 			"notes":"This query is helpful for troubleshooting blocking and deadlocking issues"
 		},
+		
 		{
 			"name": "LookAtUDFExecution",
 			"description": "Look at UDF execution statistics (Query 83) (UDF Statistics)",
@@ -515,7 +516,7 @@
 			"notes":"Gives you input buffer information from all non-system sessions for the current database Replaces DBCC INPUTBUFFER."
 		},
 		{
-			"name": "GetDatabaseAutomaticTuning",
+			"name": "GetDBAutomaticTuning",
 			"description": "Get database automatic tuning options (Query 87) (Automatic Tuning Options)",
 			"query": "SELECT [name], desired_state_desc, actual_state_desc, reason_desc FROM sys.database_automatic_tuning_options WITH (NOLOCK) OPTION (RECOMPILE);",
 			"notes":"Returns the automatic tuning options for this database."

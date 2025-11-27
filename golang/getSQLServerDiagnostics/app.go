@@ -91,6 +91,7 @@ func executeSQLQueries() {
 		log.Printf("Failed to write query to CSV file: %v", err)
 	}
 
+	fileCounter := 1
 	queries := readQueries(sqlquerries)
 	for i, query := range queries.Queries {
 
@@ -103,7 +104,7 @@ func executeSQLQueries() {
 		fmt.Printf("Executing Query: %s\nDescription: %s\n", query.Name, query.Description)
 		fmt.Println("Query:", query.Query)
 
-		fileName := createFileName(i, query.Name)
+		fileName := createFileName(fileCounter, query.Name)
 
 		// Check if the CSV file exists and remove it if it does
 		if _, err := os.Stat(fileName); err == nil {
@@ -113,6 +114,8 @@ func executeSQLQueries() {
 		}
 
 		executeQuery(db, query.Query, fileName)
+
+		fileCounter++
 	}
 }
 
@@ -188,7 +191,9 @@ func executeQuery(db *sql.DB, query string, fileName string) {
 		row := make([]string, len(columns))
 		for i, val := range values {
 			v := *(val.(*interface{}))
-			if b, ok := v.([]byte); ok {
+			if v == nil {
+				row[i] = "NULL"
+			} else if b, ok := v.([]byte); ok {
 				row[i] = strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", " "), "\r", " ")
 			} else {
 				row[i] = strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", v), "\n", " "), "\r", " ")
@@ -359,6 +364,7 @@ func createExcelFromCSV() {
 
 		// Create a new sheet with the name of the CSV file (without extension)
 		sheetName := strings.TrimSuffix(csvFile, ".csv")
+		fmt.Printf("Now Adding Sheet Name %s \n", sheetName)
 		if i == 0 {
 			f.SetSheetName("Sheet1", sheetName)
 		} else {
@@ -372,7 +378,6 @@ func createExcelFromCSV() {
 				f.SetCellValue(sheetName, cell, cellValue)
 			}
 		}
-
 	}
 
 	// Save the Excel file
@@ -380,6 +385,13 @@ func createExcelFromCSV() {
 		fmt.Printf("Error saving Excel file: %v\n", err)
 		return
 	}
+
+	// Debug: Print final sheet count
+	//sheets := f.GetSheetList()
+	//fmt.Printf("Total sheets in Excel file: %d\n", len(sheets))
+	//for _, s := range sheets {
+	//	fmt.Printf("Sheet in Excel: %s\n", s)
+	//}
 
 	// Delete all files in sortedFiles
 	for _, csvFileDelete := range sortedFiles {
@@ -390,7 +402,6 @@ func createExcelFromCSV() {
 			fmt.Printf("Deleted file: %s\n", csvFileDelete)
 		}
 	}
-
 }
 
 /*
