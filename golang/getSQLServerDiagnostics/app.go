@@ -1,33 +1,70 @@
-// START: TODO WORK
-// TODO: Add description for this module and how to use it
-// END: TODO WORK
-
-//config.propertiesfile that drives the database connection must be of the following format
 /*
-	DB_HOST=<host name>
-	DB_PORT=<port>
-	DB_NAME=<datbase name>
-	USER=<user>
-	PASSWORD=<password
-	TRUSTED=<use integrated security true or false in which case USER and PASSWORD is not needed>
+Package main
+
+This program connects to a SQL Server database, executes a series of SQL queries defined in a JSON file,
+and generates diagnostic reports in CSV and Excel formats. It uses a configuration file to define database
+connection details and dynamically processes queries to produce results.
+
+Author: Malcolm Pereira
+Date: November 27, 2025
+Last Modified: November 27, 2025
+Revision: 1.0.0
+
+Usage:
+- Ensure there exists a `config.properties` file contains the correct database connection details.
+  Example:
+			DB_HOST=<host name>
+			DB_PORT=<port>
+			DB_NAME=<database name>
+			USER=<user>
+			PASSWORD=<password
+			TRUSTED=<use integrated security true or false in which case USER and PASSWORD is not needed>
+
+- Define SQL queries in the json file with the following structure.
+  Example:
+		{
+			"queries": [
+					{
+						"name": "CheckVersion",
+						"description": "Confirm if the SQL Queries will work for the version of SQL Server",
+						"query": "IF NOT EXISTS (SELECT * WHERE CONVERT(varchar(128), SERVERPROPERTY('ProductMajorVersion')) = '16') BEGIN DECLARE @ProductVersion varchar(128) = CONVERT(varchar(128), SERVERPROPERTY('ProductVersion')); SELECT SERVERPROPERTY('ProductMajorVersion') AS SERVER_VERSION, 'Script does not match the ProductVersion [%s] of this instance. Many of these queries may not work on this version.' AS MESSAGE END SELECT SERVERPROPERTY('ProductMajorVersion') AS SERVER_VERSION, 'Valid Server Version for the script.' AS MESSAGE",
+						"notes":"Confirm if the SQL Queries will work for the version of SQL Server"
+					}
+					...
+					...
+					...
+			]
+		}
+
+- Run the program to generate diagnostic report, that is saved to Excel. The program will first generate CSV file and the combine them into to an excel sheet with all the rows in it.
+
+
+
+Dependencies:
+	- github.com/denisenkom/go-mssqldb for SQL Server connectivity.
+	- github.com/xuri/excelize/v2 for Excel file generation.
+	- github.com/magiconair/properties for reading configuration files.
+
 */
 
 package main
 
 import (
-	"encoding/csv"
-	"encoding/json"
+	// Standard library packages
+	"encoding/csv"  // For reading and writing CSV files
+	"encoding/json" // For parsing and encoding JSON data
 	"fmt"
 	"log"
-	"os"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
+	"os"      // For interacting with the operating system (e.g., file operations)
+	"regexp"  // For working with regular expressions
+	"sort"    // For sorting slices and user-defined collections
+	"strconv" // For converting strings to numbers and vice versa
+	"strings" // For string manipulation
 
 	"database/sql"
 
-	_ "github.com/denisenkom/go-mssqldb"
+	//_ "github.com/denisenkom/go-mssqldb"
+	_ "github.com/microsoft/go-mssqldb" // Microsoft SQL Server driver for Go From Microsoft
 
 	"github.com/xuri/excelize/v2"
 
