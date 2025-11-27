@@ -1,4 +1,13 @@
 {	
+	"querydoc":{
+		"doc_1":"This documentation explains the JSON schema on how the queries should be structured so it can be executed from the program ",
+		"doc_2":"querysource element - contains any additional information from where these queries come from, applicable if we are getting the diagnostic queries from some source, we want to acknowledge them.",
+		"doc_3":"queries element contains list of queries that we want to execute this is made of on list of queries where each query contains name, description, query and any additional notes",
+		"doc_4":"name this contains the name of the query, we want this to be less than or equal to 31 chars with no special chars, this is used to name the worksheet in the generated excel.",
+		"doc_5":"description this contains the description for the query we are executing",
+		"doc_6":"query this is the actual query to be executed, please format it to be in one line without any chars that will conflict with the JSON structure",
+		"doc_7":"notes this is any additional notes you might want to add"
+	},
 	"querysource":{
 		"sqlserververion":"2022",
 		"name":"SQL Server 2022 Diagnostic Information Queries",
