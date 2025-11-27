@@ -5,12 +5,15 @@ This program connects to a SQL Server database, executes a series of SQL queries
 and generates diagnostic reports in CSV and Excel formats. It uses a configuration file to define database
 connection details and dynamically processes queries to produce results.
 
+Some of the queries use come from https://glennsqlperformance.com/ and we acknowledge this great resource for troubleshooting SQL Server Performance.
+
 Author: Malcolm Pereira
 Date: November 27, 2025
 Last Modified: November 27, 2025
 Revision: 1.0.0
 
 Usage:
+
 - Ensure there exists a `config.properties` file contains the correct database connection details.
   Example:
 			DB_HOST=<host name>
@@ -38,8 +41,6 @@ Usage:
 
 - Run the program to generate diagnostic report, that is saved to Excel. The program will first generate CSV file and the combine them into to an excel sheet with all the rows in it.
 
-
-
 Dependencies:
 	- github.com/denisenkom/go-mssqldb for SQL Server connectivity.
 	- github.com/xuri/excelize/v2 for Excel file generation.
@@ -53,51 +54,78 @@ import (
 	// Standard library packages
 	"encoding/csv"  // For reading and writing CSV files
 	"encoding/json" // For parsing and encoding JSON data
-	"fmt"
-	"log"
-	"os"      // For interacting with the operating system (e.g., file operations)
-	"regexp"  // For working with regular expressions
-	"sort"    // For sorting slices and user-defined collections
-	"strconv" // For converting strings to numbers and vice versa
-	"strings" // For string manipulation
+	"flag"          // For command line arguments
+	"fmt"           // For formatted I/O operations
+	"log"           // For logging messages
+	"os"            // For interacting with the operating system (e.g., file operations)
+	"regexp"        // For working with regular expressions
+	"sort"          // For sorting slices and user-defined collections
+	"strconv"       // For converting strings to numbers and vice versa
+	"strings"       // For string manipulation
 
-	"database/sql"
+	"database/sql" // Database/sql package for database operations
 
-	//_ "github.com/denisenkom/go-mssqldb"
+	// SQL Server driver
+	//_ "github.com/denisenkom/go-mssqldb" // Microsoft SQL Server driver for Go From Go Community
 	_ "github.com/microsoft/go-mssqldb" // Microsoft SQL Server driver for Go From Microsoft
 
-	"github.com/xuri/excelize/v2"
-
-	"github.com/magiconair/properties"
+	// Third-party packages
+	"github.com/magiconair/properties" // For reading and handling properties files
+	"github.com/xuri/excelize/v2"      // For creating and manipulating Excel files
 )
 
-//START: TODO WORK
-//TODO: Remove hardcoded file names and make it dynamic so these  can be passed from the command line or config file
-
-// SQL Server Configuration File
-const sqlConfigProp = "config.properties"
-
-// SQL Queries File
-const sqlquerries = "sql_queries.json"
+// Default files for config and sql queries
+const sql_config = "config.properties" // SQL Server Configuration File
+const sql_queries = "sql_queries.json" // SQL Queries File
 
 // Executed Query Details
 const executed_queries = "executed_queries.csv"
-
 const excelFileName = "sql_diagnostics.xlsx"
 
-//END: TODO WORK
-
 func main() {
+
+	// Define command-line flags
+	sqlConfigProp := flag.String("config", sql_config, "Path to the SQL Server configuration file, defaulting to config.properties if not set.")
+	sqlQueries := flag.String("queries", sql_queries, "Path to the SQL queries JSON file, defaulting to sql_queries.json if not set. ")
+
+	// Parse the command-line flags
+	flag.Parse()
+
 	log.Println("Starting Application...")
 
-	executeSQLQueries()
+	executeSQLQueries(*sqlConfigProp, *sqlQueries)
 
 	createExcelFromCSV()
 
 	log.Println("Done Application...")
 }
 
-func executeSQLQueries() {
+/*
+ * executeSQLQueries reads the SQL Server configuration and queries from the specified files,
+ * executes the queries on the database, and writes the results to CSV files.
+ *
+ * Parameters:
+ * - sqlConfigProp: A string representing the path to the SQL Server configuration file.
+ * - sqlQueries: A string representing the path to the JSON file containing the SQL queries.
+ *
+ * Functionality:
+ * 1. Reads the SQL Server configuration from the `sqlConfigProp` file using the `readSQLConfig` function.
+ * 2. Deletes the `executed_queries.csv` file if it already exists.
+ * 3. Establishes a connection to the SQL Server database using the `connectToDB` function.
+ * 4. Creates a new `executed_queries.csv` file to log the executed queries and their metadata.
+ * 5. Reads the SQL queries from the `sqlQueries` file using the `readQueries` function.
+ * 6. Iterates through the queries, executes each query using the `executeQuery` function, and writes the results to individual CSV files.
+ * 7. Logs any errors encountered during file operations or query execution.
+ *
+ * Notes:
+ * - The function assumes that the configuration and query files are well-formed and accessible.
+ * - The database connection is closed automatically after all queries are executed.
+ * - Each query result is saved to a separate CSV file, with the file name generated dynamically using the `createFileName` function.
+ *
+ * Example Usage:
+ * executeSQLQueries("config.properties", "sql_queries.json")
+ */
+func executeSQLQueries(sqlConfigProp string, sqlQueries string) {
 
 	sqlConfig := readSQLConfig(sqlConfigProp)
 
@@ -129,7 +157,7 @@ func executeSQLQueries() {
 	}
 
 	fileCounter := 1
-	queries := readQueries(sqlquerries)
+	queries := readQueries(sqlQueries)
 	for i, query := range queries.Queries {
 
 		// Write query details to CSV
@@ -156,181 +184,34 @@ func executeSQLQueries() {
 	}
 }
 
-/**
- * connectToDB establishes a connection to the SQL Server database using the provided configuration.
- * @param config The SQLServerConfig containing the database connection details.
- * @return *sql.DB The database connection object.
+/*
+ * createExcelFromCSV generates an Excel file from multiple CSV files in the current directory.
+ * It combines the data from all CSV files into separate sheets in the Excel file, with the
+ * `executed_queries.csv` file always appearing as the first sheet. The function also deletes
+ * the original CSV files after successfully creating the Excel file.
+ *
+ * Parameters:
+ * - excelFileName: The name of the Excel file to be created.
+ *
+ * Functionality:
+ * 1. Checks if the specified Excel file already exists and deletes it if it does.
+ * 2. Reads all files in the current directory and filters out only the `.csv` files.
+ * 3. Separates `executed_queries.csv` from other CSV files to ensure it appears as the first sheet.
+ * 4. Sorts the remaining CSV files based on their numeric prefixes for consistent ordering.
+ * 5. Creates a new Excel file and adds each CSV file's data to a separate sheet.
+ *    - The sheet name is derived from the CSV file name (excluding the `.csv` extension).
+ * 6. Saves the Excel file with the specified name.
+ * 7. Deletes all the original CSV files after the Excel file is successfully created.
+ *
+ * Notes:
+ * - The function uses the `excelize` library to create and manipulate Excel files.
+ * - If any errors occur while reading CSV files or saving the Excel file, the function logs the error
+ *   and exits gracefully.
+ * - The function assumes that the CSV files are well-formed and contain valid data.
+ *
+ * Example Usage:
+ * createExcelFromCSV("sql_diagnostics_27112025_143045.xlsx")
  */
-func connectToDB(sqlConfig SQLServerConfig) *sql.DB {
-	var slqConnectionString = ""
-	if sqlConfig.Trusted {
-		slqConnectionString = "sqlserver://" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&trusted_connection=yes&encrypt=false&trustservercertificate=true"
-	} else {
-		slqConnectionString = "sqlserver://" + sqlConfig.SQLServerUser + ":" + sqlConfig.SQLServerPassword + "@" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&encrypt=false&trustservercertificate=true"
-	}
-	db, err := sql.Open("sqlserver", slqConnectionString)
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	return db
-}
-
-/**
- * executeQuery runs a simple query and prints the result.
- * @param db The database connection object.
- */
-func executeQuery(db *sql.DB, query string, fileName string) {
-	rows, err := db.Query(query)
-	if err != nil {
-		log.Fatalf("Failed to execute query: %v", err)
-	}
-	defer rows.Close() // Ensure rows are closed to release resources
-
-	// Open the CSV file for writing
-	csvFile, err := os.Create(fileName)
-	if err != nil {
-		log.Fatalf("Failed to create fileName CSV file %s: %v", fileName, err)
-	}
-	defer csvFile.Close()
-
-	writer := csv.NewWriter(csvFile)
-	defer writer.Flush()
-
-	// Handle rows if the query returns results
-	columns, err := rows.Columns()
-	if err != nil {
-		log.Printf("Failed to get columns: %v", err)
-		return
-	}
-
-	// Write the header row to the CSV file
-	err = writer.Write(columns)
-	if err != nil {
-		log.Printf("Failed to write header to CSV file: %v", err)
-		return
-	}
-
-	// Create a slice of interface{}'s to hold each column value
-	values := make([]interface{}, len(columns))
-	for i := range values {
-		values[i] = new(interface{})
-	}
-
-	// Iterate through the rows
-	for rows.Next() {
-		err := rows.Scan(values...)
-		if err != nil {
-			log.Printf("Failed to scan row: %v", err)
-			continue
-		}
-
-		// Convert the row values to strings for CSV writing
-		row := make([]string, len(columns))
-		for i, val := range values {
-			v := *(val.(*interface{}))
-			if v == nil {
-				row[i] = "NULL"
-			} else if b, ok := v.([]byte); ok {
-				row[i] = strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", " "), "\r", " ")
-			} else {
-				row[i] = strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", v), "\n", " "), "\r", " ")
-			}
-		}
-
-		// Write the row to the CSV file
-		err = writer.Write(row)
-		if err != nil {
-			log.Printf("Failed to write row to CSV file: %v", err)
-		}
-	}
-
-	// Check for errors during row iteration
-	if err = rows.Err(); err != nil {
-		log.Printf("Error occurred during row iteration: %v", err)
-	}
-
-}
-
-/**
- * readSQLConfig checks for the existence of the SQL configuration file and reads its contents.
- * @param filePath The path to the SQL configuration file.
- * @return SQLServerConfig The SQL Server configuration details.
- */
-func readSQLConfig(filePath string) SQLServerConfig {
-	if _, err := os.Stat(filePath); err == nil || os.IsExist(err) {
-		return getSQLServerConfig(filePath)
-	}
-	log.Fatalf("Please validate that %s existing in current directory for sql configuration", sqlConfigProp)
-	panic(fmt.Sprintf("Please validate that %s existing in current directory for sql configuration", sqlConfigProp))
-}
-
-/**
- * getSQLServerConfig reads the SQL Server configuration from the specified properties file.
- * @param propFile The path to the properties file.
- */
-func getSQLServerConfig(propFile string) SQLServerConfig {
-
-	propertyFile := []string{propFile}
-
-	sqlProperties, error := properties.LoadFiles(propertyFile, properties.UTF8, true)
-
-	if error != nil {
-		log.Fatalln("Error Loading Properties File ", error)
-		panic(error)
-	}
-
-	var sqlServerConfig SQLServerConfig
-	sqlServerConfig.SQLServerHost = sqlProperties.MustGet("DB_HOST")
-	sqlServerConfig.SQLServerPort = sqlProperties.MustGet("DB_PORT")
-	sqlServerConfig.SQLServerDB = sqlProperties.MustGet("DB_NAME")
-	sqlServerConfig.SQLServerUser = sqlProperties.MustGet("USER")
-	sqlServerConfig.SQLServerPassword = sqlProperties.MustGet("PASSWORD")
-	trusted, err := strconv.ParseBool(sqlProperties.MustGet("TRUSTED"))
-	if err != nil {
-		fmt.Printf("Invalid Trusted Property: %s, will default to false", sqlProperties.MustGet("TRUSTED"))
-		sqlServerConfig.Trusted = false
-	} else {
-		sqlServerConfig.Trusted = trusted
-	}
-	return sqlServerConfig
-}
-
-/**
- * readQueries reads the SQL queries from the JSON file and returns a Queries object.
- * @param filePath The path to the JSON file.
- * @return Queries The parsed queries.
- */
-func readQueries(filePath string) Queries {
-	file, err := os.ReadFile(filePath)
-	if err != nil {
-		log.Fatalf("Failed to read JSON file: %v", err)
-	}
-
-	var queries Queries
-	err = json.Unmarshal(file, &queries)
-	if err != nil {
-		log.Fatalf("Failed to parse JSON file: %v", err)
-	}
-
-	return queries
-}
-
-/* createFileName generates a sanitized file name based on the query index and name.
- * It replaces spaces with underscores and removes special characters.
- * @param index The index of the query.
- */
-func createFileName(index int, queryName string) string {
-	// Replace spaces with underscores
-	queryName = strings.ReplaceAll(queryName, " ", "_")
-
-	// Remove special characters using regex
-	re := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
-	queryName = re.ReplaceAllString(queryName, "")
-
-	// Concatenate index and sanitized query name
-	return fmt.Sprintf("%d_%s.csv", index, queryName)
-}
-
 func createExcelFromCSV() {
 
 	// Check if the CSV file exists and remove it if it does
@@ -442,45 +323,386 @@ func createExcelFromCSV() {
 }
 
 /*
- * SQLServerConfig holds the configuration details for connecting to a SQL Server database.
+ * readSQLConfig checks for the existence of the SQL configuration file and reads its contents.
+ *
+ * Parameters:
+ * - filePath: A string representing the path to the SQL configuration file.
+ *
+ * Returns:
+ * - SQLServerConfig: A struct containing the SQL Server configuration details, including host, port, database name,
+ *   user credentials, and whether to use integrated security (trusted connection).
+ *
+ * Functionality:
+ * 1. Verifies if the specified SQL configuration file exists in the current directory.
+ *    - If the file exists, it calls the `getSQLServerConfig` function to read and parse the configuration details.
+ *    - If the file does not exist, the function logs an error message and terminates the program.
+ * 2. Returns the parsed `SQLServerConfig` struct if the file is successfully read and parsed.
+ *
+ * Notes:
+ * - The function assumes that the configuration file is well-formed and contains all required keys.
+ * - If the file does not exist, the program terminates with a fatal error message.
+ *
+ * Example Usage:
+ * config := readSQLConfig("config.properties")
+ * fmt.Printf("SQL Server Host: %s\n", config.SQLServerHost)
+ */
+func readSQLConfig(filePath string) SQLServerConfig {
+	if _, err := os.Stat(filePath); err == nil || os.IsExist(err) {
+		return getSQLServerConfig(filePath)
+	}
+	log.Fatalf("Please validate that %s existing in current directory for sql configuration", filePath)
+	panic(fmt.Sprintf("Please validate that %s existing in current directory for sql configuration", filePath))
+}
+
+/*
+ * connectToDB establishes a connection to the SQL Server database using the provided configuration.
+ *
+ * Parameters:
+ * - sqlConfig: A `SQLServerConfig` struct containing the database connection details, such as host, port,
+ *   database name, user credentials, and whether to use integrated security (trusted connection).
+ *
+ * Returns:
+ * - *sql.DB: A pointer to the `sql.DB` object representing the database connection.
+ *
+ * Functionality:
+ * 1. Constructs the SQL Server connection string based on the provided configuration.
+ *    - If `Trusted` is true, the connection string uses integrated security.
+ *    - If `Trusted` is false, the connection string includes the username and password.
+ * 2. Opens a connection to the SQL Server database using the constructed connection string.
+ * 3. Returns the database connection object (`*sql.DB`) if the connection is successful.
+ * 4. Logs a fatal error and terminates the program if the connection fails.
+ *
+ * Notes:
+ * - The function assumes that the `sqlConfig` struct contains valid and complete connection details.
+ * - The caller is responsible for closing the database connection when it is no longer needed.
+ *
+ * Example Usage:
+ * sqlConfig := SQLServerConfig{
+ *     SQLServerHost: "localhost",
+ *     SQLServerPort: "1433",
+ *     SQLServerDB:   "TestDB",
+ *     SQLServerUser: "sa",
+ *     SQLServerPassword: "password",
+ *     Trusted:       false,
+ * }
+ * db := connectToDB(sqlConfig)
+ * defer db.Close()
+ */
+func connectToDB(sqlConfig SQLServerConfig) *sql.DB {
+	var slqConnectionString = ""
+	if sqlConfig.Trusted {
+		slqConnectionString = "sqlserver://" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&trusted_connection=yes&encrypt=false&trustservercertificate=true"
+	} else {
+		slqConnectionString = "sqlserver://" + sqlConfig.SQLServerUser + ":" + sqlConfig.SQLServerPassword + "@" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&encrypt=false&trustservercertificate=true"
+	}
+	db, err := sql.Open("sqlserver", slqConnectionString)
+	if err != nil {
+		log.Fatalf("Failed to connect to database: %v", err)
+	}
+	return db
+}
+
+/*
+ * executeQuery runs a SQL query on the provided database connection and writes the result to a CSV file.
+ *
+ * Parameters:
+ * - db: A pointer to the `sql.DB` object representing the database connection.
+ * - query: A string containing the SQL query to be executed.
+ * - fileName: A string representing the name of the CSV file where the query results will be saved.
+ *
+ * Functionality:
+ * 1. Executes the provided SQL query using the database connection.
+ * 2. Fetches the query results and writes them to the specified CSV file.
+ * 3. Logs any errors encountered during query execution or file writing.
+ *
+ * Notes:
+ * - The function assumes that the database connection (`db`) is valid and open.
+ * - If the query fails or the file cannot be written, the function logs the error and terminates the program.
+ * - The CSV file will contain the query results, with the first row being the column headers.
+ *
+ * Example Usage:
+ * db, err := sql.Open("mssql", connectionString)
+ * if err != nil {
+ *     log.Fatalf("Failed to connect to database: %v", err)
+ * }
+ * defer db.Close()
+ *
+ * executeQuery(db, "SELECT * FROM Users", "users.csv")
+ */
+func executeQuery(db *sql.DB, query string, fileName string) {
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Fatalf("Failed to execute query: %v", err)
+	}
+	defer rows.Close() // Ensure rows are closed to release resources
+
+	// Open the CSV file for writing
+	csvFile, err := os.Create(fileName)
+	if err != nil {
+		log.Fatalf("Failed to create fileName CSV file %s: %v", fileName, err)
+	}
+	defer csvFile.Close()
+
+	writer := csv.NewWriter(csvFile)
+	defer writer.Flush()
+
+	// Handle rows if the query returns results
+	columns, err := rows.Columns()
+	if err != nil {
+		log.Printf("Failed to get columns: %v", err)
+		return
+	}
+
+	// Write the header row to the CSV file
+	err = writer.Write(columns)
+	if err != nil {
+		log.Printf("Failed to write header to CSV file: %v", err)
+		return
+	}
+
+	// Create a slice of interface{}'s to hold each column value
+	values := make([]interface{}, len(columns))
+	for i := range values {
+		values[i] = new(interface{})
+	}
+
+	// Iterate through the rows
+	for rows.Next() {
+		err := rows.Scan(values...)
+		if err != nil {
+			log.Printf("Failed to scan row: %v", err)
+			continue
+		}
+
+		// Convert the row values to strings for CSV writing
+		row := make([]string, len(columns))
+		for i, val := range values {
+			v := *(val.(*interface{}))
+			if v == nil {
+				row[i] = "NULL"
+			} else if b, ok := v.([]byte); ok {
+				row[i] = strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", " "), "\r", " ")
+			} else {
+				row[i] = strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", v), "\n", " "), "\r", " ")
+			}
+		}
+
+		// Write the row to the CSV file
+		err = writer.Write(row)
+		if err != nil {
+			log.Printf("Failed to write row to CSV file: %v", err)
+		}
+	}
+
+	// Check for errors during row iteration
+	if err = rows.Err(); err != nil {
+		log.Printf("Error occurred during row iteration: %v", err)
+	}
+}
+
+/*
+ * getSQLServerConfig reads the SQL Server configuration from the specified properties file
+ * and returns a `SQLServerConfig` struct populated with the configuration details.
+ *
+ * Parameters:
+ * - propFile: A string representing the path to the properties file containing the SQL Server configuration.
+ *
+ * Returns:
+ * - SQLServerConfig: A struct containing the SQL Server configuration details, including host, port, database name,
+ *   user credentials, and whether to use integrated security (trusted connection).
+ *
+ * Functionality:
+ * 1. Loads the properties file specified by `propFile` using the `properties` library.
+ * 2. Reads the required configuration values (`DB_HOST`, `DB_PORT`, `DB_NAME`, `USER`, `PASSWORD`, `TRUSTED`) from the file.
+ * 3. Parses the `TRUSTED` property as a boolean value to determine whether to use integrated security.
+ * 4. If any required property is missing, the program terminates with an error.
+ * 5. Returns a `SQLServerConfig` struct populated with the configuration values.
+ *
+ * Notes:
+ * - The function assumes that the properties file is well-formed and contains all required keys.
+ * - If the `TRUSTED` property is invalid or missing, it defaults to `false`.
+ * - The `properties.MustGet` method is used to ensure that required properties are present in the file.
+ *
+ * Example Usage:
+ * config := getSQLServerConfig("config.properties")
+ * fmt.Printf("Connecting to SQL Server at %s:%s\n", config.SQLServerHost, config.SQLServerPort)
+ */
+func getSQLServerConfig(propFile string) SQLServerConfig {
+
+	propertyFile := []string{propFile}
+
+	sqlProperties, error := properties.LoadFiles(propertyFile, properties.UTF8, true)
+
+	if error != nil {
+		log.Fatalln("Error Loading Properties File ", error)
+		panic(error)
+	}
+
+	var sqlServerConfig SQLServerConfig
+	sqlServerConfig.SQLServerHost = sqlProperties.MustGet("DB_HOST")
+	sqlServerConfig.SQLServerPort = sqlProperties.MustGet("DB_PORT")
+	sqlServerConfig.SQLServerDB = sqlProperties.MustGet("DB_NAME")
+	sqlServerConfig.SQLServerUser = sqlProperties.MustGet("USER")
+	sqlServerConfig.SQLServerPassword = sqlProperties.MustGet("PASSWORD")
+	trusted, err := strconv.ParseBool(sqlProperties.MustGet("TRUSTED"))
+	if err != nil {
+		fmt.Printf("Invalid Trusted Property: %s, will default to false", sqlProperties.MustGet("TRUSTED"))
+		sqlServerConfig.Trusted = false
+	} else {
+		sqlServerConfig.Trusted = trusted
+	}
+	return sqlServerConfig
+}
+
+/*
+ * readQueries reads the SQL queries from a JSON file and returns a Queries object.
+ *
+ * Parameters:
+ * - filePath: A string representing the path to the JSON file containing the SQL queries.
+ *
+ * Returns:
+ * - Queries: A struct containing the parsed SQL queries and their metadata.
+ *
+ * Functionality:
+ * 1. Reads the content of the specified JSON file into memory.
+ * 2. Parses the JSON content into a `Queries` struct using the `json.Unmarshal` function.
+ * 3. If any errors occur during file reading or JSON parsing, the function logs the error and terminates the program.
+ *
+ * Notes:
+ * - The function assumes that the JSON file is well-formed and adheres to the expected structure.
+ * - The `Queries` struct must match the structure of the JSON file for successful parsing.
+ *
+ * Example Usage:
+ * queries := readQueries("sql_queries.json")
+ * fmt.Printf("Loaded %d queries from the JSON file.\n", len(queries.Queries))
+ */
+func readQueries(filePath string) Queries {
+	file, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Fatalf("Failed to read JSON file: %v", err)
+	}
+
+	var queries Queries
+	err = json.Unmarshal(file, &queries)
+	if err != nil {
+		log.Fatalf("Failed to parse JSON file: %v", err)
+	}
+
+	return queries
+}
+
+/*
+ * createFileName generates a sanitized file name for a query result based on the query index and name.
+ * The function ensures that the file name is safe for use in the file system by replacing spaces with
+ * underscores and removing special characters.
+ *
+ * Parameters:
+ * - index: The index of the query, used as a prefix in the file name.
+ * - queryName: The name of the query, which will be sanitized and included in the file name.
+ *
+ * Returns:
+ * - A string representing the sanitized file name in the format "<index>_<sanitized_query_name>.csv".
+ *
+ * Functionality:
+ * 1. Replaces all spaces in the `queryName` with underscores.
+ * 2. Removes all special characters from the `queryName` using a regular expression.
+ * 3. Concatenates the `index` and the sanitized `queryName` to generate the file name.
+ * 4. Appends the `.csv` extension to the file name.
+ *
+ * Example:
+ * Input: index = 1, queryName = "Sample Query Name!"
+ * Output: "1_Sample_Query_Name.csv"
+ *
+ * Notes:
+ * - The function ensures that the generated file name is valid and safe for use in most file systems.
+ * - Special characters such as `!`, `@`, `#`, etc., are removed to avoid issues with file system compatibility.
+ */
+func createFileName(index int, queryName string) string {
+	// Replace spaces with underscores
+	queryName = strings.ReplaceAll(queryName, " ", "_")
+
+	// Remove special characters using regex
+	re := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+	queryName = re.ReplaceAllString(queryName, "")
+
+	// Concatenate index and sanitized query name
+	return fmt.Sprintf("%d_%s.csv", index, queryName)
+}
+
+/*
+ * SQLServerConfig holds the configuration details required to connect to a SQL Server database.
+ * It includes information such as the host, port, database name, user credentials, and whether
+ * to use integrated security (trusted connection).
+ *
+ * Fields:
+ * - SQLServerHost: The hostname or IP address of the SQL Server.
+ * - SQLServerPort: The port number on which the SQL Server is listening.
+ * - SQLServerDB: The name of the database to connect to.
+ * - SQLServerUser: The username for authentication (if not using a trusted connection).
+ * - SQLServerPassword: The password for authentication (if not using a trusted connection).
+ * - Trusted: A boolean indicating whether to use integrated security (trusted connection).
  */
 type SQLServerConfig struct {
-	SQLServerHost     string
-	SQLServerPort     string
-	SQLServerDB       string
-	SQLServerUser     string
-	SQLServerPassword string
-	Trusted           bool
+	SQLServerHost     string // Hostname or IP address of the SQL Server
+	SQLServerPort     string // Port number on which the SQL Server is listening
+	SQLServerDB       string // Name of the database to connect to
+	SQLServerUser     string // Username for authentication
+	SQLServerPassword string // Password for authentication
+	Trusted           bool   // Whether to use integrated security (trusted connection)
 }
 
-/**
- * Queries holds a collection of Query objects.
+/*
+ * Queries represents a collection of SQL queries along with their metadata.
+ * It contains information about the source of the queries and the list of individual queries.
+ *
+ * Fields:
+ * - QuerySource: Metadata about the source of the queries, such as the SQL Server version, author, and other details.
+ * - Queries: A list of `Query` objects, each representing a single SQL query with its name, description, and other details.
  */
 type Queries struct {
-	QuerySource QuerySource `json:"querysource"`
-	Queries     []Query     `json:"queries"`
+	QuerySource QuerySource `json:"querysource"` // Metadata about the source of the queries
+	Queries     []Query     `json:"queries"`     // List of SQL queries
 }
 
 /*
-* Query represents a single SQL query with its name and description.
+ * Query represents a single SQL query along with its metadata.
+ * It provides details about the query, including its name, description, and any additional notes.
+ *
+ * Fields:
+ * - Name: The name or identifier of the query.
+ * - Description: A brief description of the purpose or functionality of the query.
+ * - Query: The actual SQL query string to be executed.
+ * - Notes: Additional notes or comments about the query, such as usage instructions or caveats.
  */
 type Query struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Query       string `json:"query"`
-	Notes       string `json:"notes"`
+	Name        string `json:"name"`        // Name or identifier of the query
+	Description string `json:"description"` // Brief description of the query's purpose
+	Query       string `json:"query"`       // The SQL query string
+	Notes       string `json:"notes"`       // Additional notes or comments about the query
 }
 
 /*
-* Query represents a single SQL query with its name and description.
+ * QuerySource represents metadata about the source of a collection of SQL queries.
+ * It provides information about the SQL Server version, the author, and other details
+ * related to the origin and context of the queries.
+ *
+ * Fields:
+ * - SQLServerVersion: Specifies the version of the SQL Server for which the queries are designed.
+ * - Name: The name or title of the query source.
+ * - Author: The name of the person or entity who authored the queries.
+ * - LastModified: The date when the query source was last modified.
+ * - Source: A brief description of the source or origin of the queries.
+ * - URL: A URL pointing to additional information or documentation about the queries.
+ * - Comments: Any additional comments or notes about the query source.
+ * - CopyRight: Copyright information related to the query source.
  */
 type QuerySource struct {
-	SQLServerVersion string `json:"sqlserververion"`
-	Name             string `json:"name"`
-	Author           string `json:"author"`
-	LastModield      string `json:"lastmodified"`
-	Source           string `json:"source"`
-	URL              string `json:"url"`
-	Comments         string `json:"comments"`
-	CopyRight        string `json:"copyright"`
+	SQLServerVersion string `json:"sqlserverversion"` // SQL Server version for which the queries are intended
+	Name             string `json:"name"`             // Name or title of the query source
+	Author           string `json:"author"`           // Author of the queries
+	LastModified     string `json:"lastmodified"`     // Last modification date of the query source
+	Source           string `json:"source"`           // Description of the source or origin of the queries
+	URL              string `json:"url"`              // URL for additional information or documentation
+	Comments         string `json:"comments"`         // Additional comments or notes
+	CopyRight        string `json:"copyright"`        // Copyright information
 }
