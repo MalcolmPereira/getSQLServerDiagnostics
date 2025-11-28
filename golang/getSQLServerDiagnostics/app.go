@@ -62,6 +62,7 @@ import (
 	"sort"          // For sorting slices and user-defined collections
 	"strconv"       // For converting strings to numbers and vice versa
 	"strings"       // For string manipulation
+	"time"          // For working with date and time
 
 	"database/sql" // Database/sql package for database operations
 
@@ -80,8 +81,37 @@ const sql_queries = "sql_queries.json" // SQL Queries File
 
 // Executed Query Details
 const executed_queries = "executed_queries.csv"
-const excelFileName = "sql_diagnostics.xlsx"
 
+/*
+ * main is the entry point of the application. It initializes the program, parses command-line arguments,
+ * and orchestrates the execution of SQL queries and the generation of diagnostic reports.
+ *
+ * Functionality:
+ * 1. Defines command-line flags for specifying the paths to the SQL Server configuration file and the SQL queries JSON file.
+ *    - `-config`: Path to the SQL Server configuration file (defaults to `config.properties`).
+ *    - `-queries`: Path to the SQL queries JSON file (defaults to `sql_queries.json`).
+ * 2. Parses the command-line flags to retrieve the user-specified or default file paths.
+ * 3. Logs the start of the application.
+ * 4. Calls the `executeSQLQueries` function to:
+ *    - Read the SQL Server configuration and queries.
+ *    - Execute the queries on the database.
+ *    - Save the results to individual CSV files.
+ * 5. Calls the `createExcelFromCSV` function to:
+ *    - Combine the generated CSV files into a single Excel file.
+ *    - Delete the original CSV files after the Excel file is created.
+ * 6. Logs the completion of the application.
+ *
+ * Notes:
+ * - The function assumes that the configuration and query files are well-formed and accessible.
+ * - The application logs errors and exits gracefully if any critical issues are encountered.
+ *
+ * Example Usage:
+ * Run the program with default file paths:
+ *   go run app.go
+ *
+ * Specify custom file paths:
+ *   go run app.go -config="custom_config.properties" -queries="custom_queries.json"
+ */
 func main() {
 
 	// Define command-line flags
@@ -213,6 +243,10 @@ func executeSQLQueries(sqlConfigProp string, sqlQueries string) {
  * createExcelFromCSV("sql_diagnostics_27112025_143045.xlsx")
  */
 func createExcelFromCSV() {
+
+	// Combine all CSV files in the temp directory into an Excel file
+	currentTime := time.Now()
+	excelFileName := fmt.Sprintf("sql_diagnostics_%s.xlsx", currentTime.Format("02012006_150405"))
 
 	// Check if the CSV file exists and remove it if it does
 	if _, err := os.Stat(excelFileName); err == nil {
