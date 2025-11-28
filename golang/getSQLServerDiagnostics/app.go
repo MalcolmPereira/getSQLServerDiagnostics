@@ -123,9 +123,16 @@ func main() {
 
 	log.Println("Starting Application...")
 
-	executeSQLQueries(*sqlConfigProp, *sqlQueries)
+	// Create a unique temporary directory for storing CSV files
+	tempDir, err := os.MkdirTemp("", "sql_diagnostics_")
+	if err != nil {
+		log.Fatalf("Failed to create temporary directory: %v", err)
+	}
+	defer os.RemoveAll(tempDir) // Ensure the temporary directory is deleted
 
-	createExcelFromCSV()
+	executeSQLQueries(*sqlConfigProp, *sqlQueries, tempDir)
+
+	createExcelFromCSV(tempDir)
 
 	log.Println("Done Application...")
 }
@@ -155,9 +162,29 @@ func main() {
  * Example Usage:
  * executeSQLQueries("config.properties", "sql_queries.json")
  */
-func executeSQLQueries(sqlConfigProp string, sqlQueries string) {
+func executeSQLQueries(sqlConfigProp string, sqlQueries string, tempDir string) {
 
+	//Read the SQL Server Connection Configuration
 	sqlConfig := readSQLConfig(sqlConfigProp)
+
+	db := connectToDB(sqlConfig)
+	defer db.Close()
+
+	//Read the JSON file containing the SQL Server Queries to be executed
+	fileCounter := 1
+	queries := readQueries(sqlQueries)
+
+	// Change the current working directory to the temporary directory
+	originalDir, err := os.Getwd() // Save the original working directory
+	if err != nil {
+		log.Fatalf("Failed to get current working directory: %v", err)
+	}
+	defer os.Chdir(originalDir) // Ensure we return to the original directory after execution
+
+	err = os.Chdir(tempDir) // Change to the temporary directory
+	if err != nil {
+		log.Fatalf("Failed to change to temporary directory: %v", err)
+	}
 
 	// Check if the CSV file exists and remove it if it does
 	if _, err := os.Stat(executed_queries); err == nil {
@@ -165,9 +192,6 @@ func executeSQLQueries(sqlConfigProp string, sqlQueries string) {
 			log.Fatalf("Failed to remove existing executed_queries.csv file: %v", err)
 		}
 	}
-
-	db := connectToDB(sqlConfig)
-	defer db.Close()
 
 	//Create CSV file
 	csvFile, err := os.Create(executed_queries)
@@ -186,8 +210,6 @@ func executeSQLQueries(sqlConfigProp string, sqlQueries string) {
 		log.Printf("Failed to write query to CSV file: %v", err)
 	}
 
-	fileCounter := 1
-	queries := readQueries(sqlQueries)
 	for i, query := range queries.Queries {
 
 		// Write query details to CSV
@@ -242,7 +264,19 @@ func executeSQLQueries(sqlConfigProp string, sqlQueries string) {
  * Example Usage:
  * createExcelFromCSV("sql_diagnostics_27112025_143045.xlsx")
  */
-func createExcelFromCSV() {
+func createExcelFromCSV(tempDir string) {
+
+	// Change the current working directory to the temporary directory
+	originalDir, err := os.Getwd() // Save the original working directory
+	if err != nil {
+		log.Fatalf("Failed to get current working directory: %v", err)
+	}
+	defer os.Chdir(originalDir) // Ensure we return to the original directory after execution
+
+	err = os.Chdir(tempDir) // Change to the temporary directory
+	if err != nil {
+		log.Fatalf("Failed to change to temporary directory: %v", err)
+	}
 
 	// Combine all CSV files in the temp directory into an Excel file
 	currentTime := time.Now()
@@ -332,6 +366,21 @@ func createExcelFromCSV() {
 		}
 	}
 
+	// Delete all files in sortedFiles
+	for _, csvFileDelete := range sortedFiles {
+		err := os.Remove(csvFileDelete)
+		if err != nil {
+			fmt.Printf("Error deleting file %s: %v\n", csvFileDelete, err)
+		} else {
+			fmt.Printf("Deleted file: %s\n", csvFileDelete)
+		}
+	}
+
+	err = os.Chdir(originalDir) // Change to the original working directory
+	if err != nil {
+		log.Fatalf("Failed to change to working directory: %v", err)
+	}
+
 	// Save the Excel file
 	if err := f.SaveAs(excelFileName); err != nil {
 		fmt.Printf("Error saving Excel file: %v\n", err)
@@ -345,15 +394,6 @@ func createExcelFromCSV() {
 	//	fmt.Printf("Sheet in Excel: %s\n", s)
 	//}
 
-	// Delete all files in sortedFiles
-	for _, csvFileDelete := range sortedFiles {
-		err := os.Remove(csvFileDelete)
-		if err != nil {
-			fmt.Printf("Error deleting file %s: %v\n", csvFileDelete, err)
-		} else {
-			fmt.Printf("Deleted file: %s\n", csvFileDelete)
-		}
-	}
 }
 
 /*
