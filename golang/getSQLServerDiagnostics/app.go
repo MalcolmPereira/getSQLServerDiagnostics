@@ -2,15 +2,21 @@
 Package main
 
 This program connects to a SQL Server database, executes a series of SQL queries defined in a JSON file,
-and generates diagnostic reports in CSV and Excel formats. It uses a configuration file to define database
-connection details and dynamically processes queries to produce results.
+and generates diagnostic reports in Excel format. It uses a configuration file to define database
+connection details and dynamically processes queries to produce results directly in Excel worksheets.
 
-Some of the queries use come from https://glennsqlperformance.com/ and we acknowledge this great resource for troubleshooting SQL Server Performance.
+- Direct Excel writing: Query results are written directly to Excel sheets without intermediate CSV files
+- Memory optimization: No temporary files or directories are created
+- Simplified workflow: Single function handles both query execution and Excel generation
+- Better error handling: Improved error reporting for individual queries
+- Excel compliance: Sheet names are properly sanitized to meet Excel requirements (31 char limit, no special chars)
+
+Some of the queries come from https://glennsqlperformance.com/ and we acknowledge this great resource for troubleshooting SQL Server Performance.
 
 Author: Malcolm Pereira
 Date: November 27, 2025
 Last Modified: November 27, 2025
-Revision: 1.0.0
+Revision: 2.0.0
 
 Usage:
 
@@ -39,12 +45,20 @@ Usage:
 			]
 		}
 
-- Run the program to generate diagnostic report, that is saved to Excel. The program will first generate CSV file and the combine them into to an excel sheet with all the rows in it.
+- Run the program to generate diagnostic report, that is saved to Excel. The program will directly write query results to Excel worksheets without creating intermediate CSV files, resulting in faster processing and reduced disk I/O.
 
 Dependencies:
-	- github.com/denisenkom/go-mssqldb for SQL Server connectivity.
+	- github.com/microsoft/go-mssqldb for SQL Server connectivity.
 	- github.com/xuri/excelize/v2 for Excel file generation.
 	- github.com/magiconair/properties for reading configuration files.
+
+Building:
+	//Manage Dependencies
+	- go mod tidy
+
+	//Build
+	- go build -o getSQLServerDiagnostics.exe
+	- go build
 
 */
 
@@ -52,14 +66,12 @@ package main
 
 import (
 	// Standard library packages
-	"encoding/csv"  // For reading and writing CSV files
 	"encoding/json" // For parsing and encoding JSON data
 	"flag"          // For command line arguments
 	"fmt"           // For formatted I/O operations
 	"log"           // For logging messages
 	"os"            // For interacting with the operating system (e.g., file operations)
 	"regexp"        // For working with regular expressions
-	"sort"          // For sorting slices and user-defined collections
 	"strconv"       // For converting strings to numbers and vice versa
 	"strings"       // For string manipulation
 	"time"          // For working with date and time
@@ -78,9 +90,6 @@ import (
 // Default files for config and sql queries
 const sql_config = "config.properties" // SQL Server Configuration File
 const sql_queries = "sql_queries.json" // SQL Queries File
-
-// Executed Query Details
-const executed_queries = "executed_queries.csv"
 
 /*
  * main is the entry point of the application. It initializes the program, parses command-line arguments,
@@ -123,23 +132,16 @@ func main() {
 
 	log.Println("Starting Application...")
 
-	// Create a unique temporary directory for storing CSV files
-	tempDir, err := os.MkdirTemp("", "sql_diagnostics_")
-	if err != nil {
-		log.Fatalf("Failed to create temporary directory: %v", err)
-	}
-	defer os.RemoveAll(tempDir) // Ensure the temporary directory is deleted
-
-	executeSQLQueries(*sqlConfigProp, *sqlQueries, tempDir)
-
-	createExcelFromCSV(tempDir)
+	// Execute SQL queries and create Excel file directly
+	executeSQLQueriesAndCreateExcel(*sqlConfigProp, *sqlQueries)
 
 	log.Println("Done Application...")
 }
 
 /*
- * executeSQLQueries reads the SQL Server configuration and queries from the specified files,
- * executes the queries on the database, and writes the results to CSV files.
+ * executeSQLQueriesAndCreateExcel reads the SQL Server configuration and queries from the specified files,
+ * executes the queries on the database, and writes the results directly to an Excel file without
+ * creating intermediate CSV files.
  *
  * Parameters:
  * - sqlConfigProp: A string representing the path to the SQL Server configuration file.
@@ -147,253 +149,82 @@ func main() {
  *
  * Functionality:
  * 1. Reads the SQL Server configuration from the `sqlConfigProp` file using the `readSQLConfig` function.
- * 2. Deletes the `executed_queries.csv` file if it already exists.
- * 3. Establishes a connection to the SQL Server database using the `connectToDB` function.
- * 4. Creates a new `executed_queries.csv` file to log the executed queries and their metadata.
- * 5. Reads the SQL queries from the `sqlQueries` file using the `readQueries` function.
- * 6. Iterates through the queries, executes each query using the `executeQuery` function, and writes the results to individual CSV files.
- * 7. Logs any errors encountered during file operations or query execution.
+ * 2. Establishes a connection to the SQL Server database using the `connectToDB` function.
+ * 3. Reads the SQL queries from the `sqlQueries` file using the `readQueries` function.
+ * 4. Creates a new Excel file with a timestamped name.
+ * 5. Creates an "executed_queries" sheet as the first sheet with query metadata.
+ * 6. Iterates through the queries, executes each query, and writes results directly to separate Excel sheets.
+ * 7. Saves the completed Excel file.
  *
  * Notes:
- * - The function assumes that the configuration and query files are well-formed and accessible.
- * - The database connection is closed automatically after all queries are executed.
- * - Each query result is saved to a separate CSV file, with the file name generated dynamically using the `createFileName` function.
- *
- * Example Usage:
- * executeSQLQueries("config.properties", "sql_queries.json")
+ * - This function eliminates the need for temporary CSV files and directory management.
+ * - Each query result is written to a separate sheet in the Excel file.
+ * - The first sheet contains metadata about all executed queries.
+ * - Memory usage is optimized by processing one query at a time.
  */
-func executeSQLQueries(sqlConfigProp string, sqlQueries string, tempDir string) {
+func executeSQLQueriesAndCreateExcel(sqlConfigProp string, sqlQueries string) {
 
-	//Read the SQL Server Connection Configuration
+	// Read the SQL Server Connection Configuration
 	sqlConfig := readSQLConfig(sqlConfigProp)
 
 	db := connectToDB(sqlConfig)
 	defer db.Close()
 
-	//Read the JSON file containing the SQL Server Queries to be executed
-	fileCounter := 1
+	// Read the JSON file containing the SQL Server Queries to be executed
 	queries := readQueries(sqlQueries)
 
-	// Change the current working directory to the temporary directory
-	originalDir, err := os.Getwd() // Save the original working directory
-	if err != nil {
-		log.Fatalf("Failed to get current working directory: %v", err)
-	}
-	defer os.Chdir(originalDir) // Ensure we return to the original directory after execution
-
-	err = os.Chdir(tempDir) // Change to the temporary directory
-	if err != nil {
-		log.Fatalf("Failed to change to temporary directory: %v", err)
-	}
-
-	// Check if the CSV file exists and remove it if it does
-	if _, err := os.Stat(executed_queries); err == nil {
-		if err := os.Remove(executed_queries); err != nil {
-			log.Fatalf("Failed to remove existing executed_queries.csv file: %v", err)
-		}
-	}
-
-	//Create CSV file
-	csvFile, err := os.Create(executed_queries)
-	if err != nil {
-		log.Fatalf("Failed to create executed_queries.csv file: %v", err)
-	}
-	defer csvFile.Close()
-
-	//Get Writer
-	writer := csv.NewWriter(csvFile)
-	defer writer.Flush()
-
-	// Write CSV Header Row
-	err = writer.Write([]string{"Sr.No", "Query", "Query Notes"})
-	if err != nil {
-		log.Printf("Failed to write query to CSV file: %v", err)
-	}
-
-	for i, query := range queries.Queries {
-
-		// Write query details to CSV
-		err = writer.Write([]string{strconv.Itoa(i + 1), query.Query, query.Notes})
-		if err != nil {
-			log.Printf("Failed to write query to CSV file: %v", err)
-		}
-
-		fmt.Printf("Executing Query: %s\nDescription: %s\n", query.Name, query.Description)
-		fmt.Println("Query:", query.Query)
-
-		fileName := createFileName(fileCounter, query.Name)
-
-		// Check if the CSV file exists and remove it if it does
-		if _, err := os.Stat(fileName); err == nil {
-			if err := os.Remove(fileName); err != nil {
-				log.Fatalf("Failed to remove existing %s file: %v", fileName, err)
-			}
-		}
-
-		executeQuery(db, query.Query, fileName)
-
-		fileCounter++
-	}
-}
-
-/*
- * createExcelFromCSV generates an Excel file from multiple CSV files in the current directory.
- * It combines the data from all CSV files into separate sheets in the Excel file, with the
- * `executed_queries.csv` file always appearing as the first sheet. The function also deletes
- * the original CSV files after successfully creating the Excel file.
- *
- * Parameters:
- * - excelFileName: The name of the Excel file to be created.
- *
- * Functionality:
- * 1. Checks if the specified Excel file already exists and deletes it if it does.
- * 2. Reads all files in the current directory and filters out only the `.csv` files.
- * 3. Separates `executed_queries.csv` from other CSV files to ensure it appears as the first sheet.
- * 4. Sorts the remaining CSV files based on their numeric prefixes for consistent ordering.
- * 5. Creates a new Excel file and adds each CSV file's data to a separate sheet.
- *    - The sheet name is derived from the CSV file name (excluding the `.csv` extension).
- * 6. Saves the Excel file with the specified name.
- * 7. Deletes all the original CSV files after the Excel file is successfully created.
- *
- * Notes:
- * - The function uses the `excelize` library to create and manipulate Excel files.
- * - If any errors occur while reading CSV files or saving the Excel file, the function logs the error
- *   and exits gracefully.
- * - The function assumes that the CSV files are well-formed and contain valid data.
- *
- * Example Usage:
- * createExcelFromCSV("sql_diagnostics_27112025_143045.xlsx")
- */
-func createExcelFromCSV(tempDir string) {
-
-	// Change the current working directory to the temporary directory
-	originalDir, err := os.Getwd() // Save the original working directory
-	if err != nil {
-		log.Fatalf("Failed to get current working directory: %v", err)
-	}
-	defer os.Chdir(originalDir) // Ensure we return to the original directory after execution
-
-	err = os.Chdir(tempDir) // Change to the temporary directory
-	if err != nil {
-		log.Fatalf("Failed to change to temporary directory: %v", err)
-	}
-
-	// Combine all CSV files in the temp directory into an Excel file
+	// Create Excel file with timestamp
 	currentTime := time.Now()
 	excelFileName := fmt.Sprintf("sql_diagnostics_%s.xlsx", currentTime.Format("02012006_150405"))
 
-	// Check if the CSV file exists and remove it if it does
+	// Check if the Excel file exists and remove it if it does
 	if _, err := os.Stat(excelFileName); err == nil {
 		if err := os.Remove(excelFileName); err != nil {
-			log.Fatalf("Failed to remove existing excelFileName file: %v", err)
+			log.Fatalf("Failed to remove existing Excel file: %v", err)
 		}
 	}
-
-	// Get all files in the current directory
-	files, err := os.ReadDir(".")
-	if err != nil {
-		fmt.Printf("Error reading directory: %v\n", err)
-		return
-	}
-
-	// Filter CSV files
-	var csvFiles []string
-	for _, file := range files {
-		if !file.IsDir() && strings.HasSuffix(file.Name(), ".csv") {
-			csvFiles = append(csvFiles, file.Name())
-		}
-	}
-
-	// Separate executed_queries.csv
-	var otherFiles []string
-	for _, file := range csvFiles {
-		if file != "executed_queries.csv" {
-			otherFiles = append(otherFiles, file)
-		}
-	}
-
-	// Custom sort for other files
-	sort.SliceStable(otherFiles, func(i, j int) bool {
-		// Extract numeric prefixes for comparison
-		iPrefix, iErr := strconv.Atoi(strings.SplitN(otherFiles[i], "_", 2)[0])
-		jPrefix, jErr := strconv.Atoi(strings.SplitN(otherFiles[j], "_", 2)[0])
-
-		if iErr == nil && jErr == nil {
-			return iPrefix < jPrefix
-		}
-		return otherFiles[i] < otherFiles[j]
-	})
-
-	// Combine executed_queries.csv with sorted files
-	sortedFiles := append([]string{"executed_queries.csv"}, otherFiles...)
 
 	// Create a new Excel file
 	f := excelize.NewFile()
 
-	for i, csvFile := range sortedFiles {
+	// Create the executed_queries sheet first
+	executedQueriesSheetName := "executed_queries"
+	f.SetSheetName("Sheet1", executedQueriesSheetName)
 
-		// Open the CSV file
-		file, err := os.Open(csvFile)
-		if err != nil {
-			fmt.Printf("Error opening file %s: %v\n", csvFile, err)
-			continue
-		}
+	// Write headers for executed_queries sheet
+	f.SetCellValue(executedQueriesSheetName, "A1", "Sr.No")
+	f.SetCellValue(executedQueriesSheetName, "B1", "Query")
+	f.SetCellValue(executedQueriesSheetName, "C1", "Query Notes")
 
-		// Read the CSV file
-		reader := csv.NewReader(file)
-		rows, err := reader.ReadAll()
-		file.Close() // Ensure the file is closed immediately after reading
-		if err != nil {
-			fmt.Printf("Error reading file %s: %v\n", csvFile, err)
-			continue
-		}
-
-		// Create a new sheet with the name of the CSV file (without extension)
-		sheetName := strings.TrimSuffix(csvFile, ".csv")
-		fmt.Printf("Now Adding Sheet Name %s \n", sheetName)
-		if i == 0 {
-			f.SetSheetName("Sheet1", sheetName)
-		} else {
-			f.NewSheet(sheetName)
-		}
-
-		// Write rows to the sheet
-		for rowIndex, row := range rows {
-			for colIndex, cellValue := range row {
-				cell, _ := excelize.CoordinatesToCellName(colIndex+1, rowIndex+1)
-				f.SetCellValue(sheetName, cell, cellValue)
-			}
-		}
+	// Write query metadata to executed_queries sheet
+	for i, query := range queries.Queries {
+		rowNum := i + 2 // Start from row 2 (after header)
+		f.SetCellValue(executedQueriesSheetName, fmt.Sprintf("A%d", rowNum), i+1)
+		f.SetCellValue(executedQueriesSheetName, fmt.Sprintf("B%d", rowNum), query.Query)
+		f.SetCellValue(executedQueriesSheetName, fmt.Sprintf("C%d", rowNum), query.Notes)
 	}
 
-	// Delete all files in sortedFiles
-	for _, csvFileDelete := range sortedFiles {
-		err := os.Remove(csvFileDelete)
-		if err != nil {
-			fmt.Printf("Error deleting file %s: %v\n", csvFileDelete, err)
-		} else {
-			fmt.Printf("Deleted file: %s\n", csvFileDelete)
-		}
-	}
+	// Execute each query and create a sheet for each result
+	for i, query := range queries.Queries {
+		fmt.Printf("Executing Query: %s\nDescription: %s\n", query.Name, query.Description)
+		fmt.Println("Query:", query.Query)
 
-	err = os.Chdir(originalDir) // Change to the original working directory
-	if err != nil {
-		log.Fatalf("Failed to change to working directory: %v", err)
+		sheetName := createSheetName(i+1, query.Name)
+
+		// Execute query and write directly to Excel sheet
+		err := executeQueryToExcel(db, query.Query, f, sheetName)
+		if err != nil {
+			log.Printf("Failed to execute query %s: %v", query.Name, err)
+			continue
+		}
 	}
 
 	// Save the Excel file
 	if err := f.SaveAs(excelFileName); err != nil {
-		fmt.Printf("Error saving Excel file: %v\n", err)
-		return
+		log.Fatalf("Error saving Excel file: %v", err)
 	}
 
-	// Debug: Print final sheet count
-	//sheets := f.GetSheetList()
-	//fmt.Printf("Total sheets in Excel file: %d\n", len(sheets))
-	//for _, s := range sheets {
-	//	fmt.Printf("Sheet in Excel: %s\n", s)
-	//}
-
+	fmt.Printf("Excel file created successfully: %s\n", excelFileName)
 }
 
 /*
@@ -477,61 +308,49 @@ func connectToDB(sqlConfig SQLServerConfig) *sql.DB {
 }
 
 /*
- * executeQuery runs a SQL query on the provided database connection and writes the result to a CSV file.
+ * executeQueryToExcel runs a SQL query on the provided database connection and writes the result directly to an Excel sheet.
  *
  * Parameters:
  * - db: A pointer to the `sql.DB` object representing the database connection.
  * - query: A string containing the SQL query to be executed.
- * - fileName: A string representing the name of the CSV file where the query results will be saved.
+ * - f: A pointer to the excelize.File object representing the Excel file.
+ * - sheetName: A string representing the name of the Excel sheet where results will be written.
+ *
+ * Returns:
+ * - error: Returns an error if the query execution or Excel writing fails, nil otherwise.
  *
  * Functionality:
  * 1. Executes the provided SQL query using the database connection.
- * 2. Fetches the query results and writes them to the specified CSV file.
- * 3. Logs any errors encountered during query execution or file writing.
+ * 2. Creates a new sheet in the Excel file with the specified name.
+ * 3. Writes column headers to the first row of the sheet.
+ * 4. Iterates through query results and writes each row to the Excel sheet.
+ * 5. Handles different data types appropriately for Excel format.
  *
  * Notes:
- * - The function assumes that the database connection (`db`) is valid and open.
- * - If the query fails or the file cannot be written, the function logs the error and terminates the program.
- * - The CSV file will contain the query results, with the first row being the column headers.
- *
- * Example Usage:
- * db, err := sql.Open("mssql", connectionString)
- * if err != nil {
- *     log.Fatalf("Failed to connect to database: %v", err)
- * }
- * defer db.Close()
- *
- * executeQuery(db, "SELECT * FROM Users", "users.csv")
+ * - The function handles NULL values by converting them to "NULL" strings.
+ * - Byte arrays are converted to strings with newlines and carriage returns replaced with spaces.
+ * - Memory usage is optimized by processing one row at a time.
  */
-func executeQuery(db *sql.DB, query string, fileName string) {
+func executeQueryToExcel(db *sql.DB, query string, f *excelize.File, sheetName string) error {
 	rows, err := db.Query(query)
 	if err != nil {
-		log.Fatalf("Failed to execute query: %v", err)
+		return fmt.Errorf("failed to execute query: %v", err)
 	}
-	defer rows.Close() // Ensure rows are closed to release resources
+	defer rows.Close()
 
-	// Open the CSV file for writing
-	csvFile, err := os.Create(fileName)
-	if err != nil {
-		log.Fatalf("Failed to create fileName CSV file %s: %v", fileName, err)
-	}
-	defer csvFile.Close()
+	// Create new sheet
+	f.NewSheet(sheetName)
 
-	writer := csv.NewWriter(csvFile)
-	defer writer.Flush()
-
-	// Handle rows if the query returns results
+	// Get columns information
 	columns, err := rows.Columns()
 	if err != nil {
-		log.Printf("Failed to get columns: %v", err)
-		return
+		return fmt.Errorf("failed to get columns: %v", err)
 	}
 
-	// Write the header row to the CSV file
-	err = writer.Write(columns)
-	if err != nil {
-		log.Printf("Failed to write header to CSV file: %v", err)
-		return
+	// Write headers to first row
+	for colIndex, colName := range columns {
+		cell, _ := excelize.CoordinatesToCellName(colIndex+1, 1)
+		f.SetCellValue(sheetName, cell, colName)
 	}
 
 	// Create a slice of interface{}'s to hold each column value
@@ -540,7 +359,8 @@ func executeQuery(db *sql.DB, query string, fileName string) {
 		values[i] = new(interface{})
 	}
 
-	// Iterate through the rows
+	// Write data rows
+	rowIndex := 2 // Start from row 2 (after headers)
 	for rows.Next() {
 		err := rows.Scan(values...)
 		if err != nil {
@@ -548,30 +368,94 @@ func executeQuery(db *sql.DB, query string, fileName string) {
 			continue
 		}
 
-		// Convert the row values to strings for CSV writing
-		row := make([]string, len(columns))
-		for i, val := range values {
+		// Write each cell value
+		for colIndex, val := range values {
+			cell, _ := excelize.CoordinatesToCellName(colIndex+1, rowIndex)
 			v := *(val.(*interface{}))
+
 			if v == nil {
-				row[i] = "NULL"
+				f.SetCellValue(sheetName, cell, "NULL")
 			} else if b, ok := v.([]byte); ok {
-				row[i] = strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", " "), "\r", " ")
+				// Handle byte arrays by converting to string and cleaning up
+				cleanValue := strings.ReplaceAll(strings.ReplaceAll(string(b), "\n", " "), "\r", " ")
+				f.SetCellValue(sheetName, cell, cleanValue)
 			} else {
-				row[i] = strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", v), "\n", " "), "\r", " ")
+				// Handle other types
+				cleanValue := strings.ReplaceAll(strings.ReplaceAll(fmt.Sprintf("%v", v), "\n", " "), "\r", " ")
+				f.SetCellValue(sheetName, cell, cleanValue)
 			}
 		}
-
-		// Write the row to the CSV file
-		err = writer.Write(row)
-		if err != nil {
-			log.Printf("Failed to write row to CSV file: %v", err)
-		}
+		rowIndex++
 	}
 
 	// Check for errors during row iteration
 	if err = rows.Err(); err != nil {
-		log.Printf("Error occurred during row iteration: %v", err)
+		return fmt.Errorf("error occurred during row iteration: %v", err)
 	}
+
+	return nil
+}
+
+/*
+ * createSheetName generates a sanitized sheet name for Excel based on the query index and name.
+ * Excel has specific restrictions on sheet names (31 character limit, no special characters).
+ *
+ * Parameters:
+ * - index: The index of the query, used as a prefix in the sheet name.
+ * - queryName: The name of the query, which will be sanitized and included in the sheet name.
+ *
+ * Returns:
+ * - A string representing the sanitized sheet name in the format "<index>_<sanitized_query_name>".
+ *
+ * Functionality:
+ * 1. Replaces all spaces in the `queryName` with underscores.
+ * 2. Removes all special characters from the `queryName` using a regular expression.
+ * 3. Concatenates the `index` and the sanitized `queryName`.
+ * 4. Truncates the result to 31 characters to comply with Excel sheet name limits.
+ * 5. Ensures the sheet name doesn't contain invalid characters for Excel.
+ *
+ * Example:
+ * Input: index = 1, queryName = "Sample Query Name!"
+ * Output: "1_Sample_Query_Name"
+ *
+ * Notes:
+ * - Excel sheet names cannot exceed 31 characters.
+ * - Excel sheet names cannot contain: \ / ? * [ ] :
+ * - The function ensures compliance with these restrictions.
+ */
+func createSheetName(index int, queryName string) string {
+	// Replace spaces with underscores
+	queryName = strings.ReplaceAll(queryName, " ", "_")
+
+	// Remove characters that are invalid in Excel sheet names
+	// Excel doesn't allow: \ / ? * [ ] :
+	re := regexp.MustCompile(`[\\\/\?\*\[\]:]+`)
+	queryName = re.ReplaceAllString(queryName, "")
+
+	// Remove other special characters except underscores
+	re = regexp.MustCompile(`[^a-zA-Z0-9_]+`)
+	queryName = re.ReplaceAllString(queryName, "")
+
+	// Concatenate index and sanitized query name
+	sheetName := fmt.Sprintf("%d_%s", index, queryName)
+
+	// Excel sheet names cannot exceed 31 characters
+	if len(sheetName) > 31 {
+		// Keep the index part and truncate the name part
+		indexPart := fmt.Sprintf("%d_", index)
+		maxNameLength := 31 - len(indexPart)
+		if maxNameLength > 0 {
+			sheetName = indexPart + queryName[:maxNameLength]
+		} else {
+			// If index is too long, just use the index
+			sheetName = fmt.Sprintf("%d", index)
+			if len(sheetName) > 31 {
+				sheetName = sheetName[:31]
+			}
+		}
+	}
+
+	return sheetName
 }
 
 /*
