@@ -130,12 +130,27 @@ func main() {
 	// Parse the command-line flags
 	flag.Parse()
 
-	log.Println("Starting Application...")
+	// Prompt the user to confirm they have reviewed the JSON file
+	fmt.Println("=======================================================================================================================================================")
+	fmt.Println("                                                                                                                                                       ")
+	fmt.Println("IMPORTANT - Please Read !!!")
+	fmt.Println("Before proceeding, ensure you have reviewed the JSON file containing the SQL queries to be executed and fully understand the implications of running these queries.")
+	fmt.Println("You have confirmed that the SQL queries will not delete data or maliciously alter the database.")
+	fmt.Println("Do not execute any SQL queries unless you are certain of their purpose. If you are unsure, review the SQL queries in the JSON file carefully.")
+	fmt.Println("Type 'yes' to confirm and proceed, or any other key to exit.")
+	fmt.Println("                                                                                                                                                       ")
+	fmt.Println("=======================================================================================================================================================")
+
+	var confirmation string
+	fmt.Scanln(&confirmation)
+	if strings.ToLower(confirmation) != "yes" {
+		fmt.Println("Exiting the application. Please review the JSON file for the SQL queries before proceeding.")
+		return
+	}
 
 	// Execute SQL queries and create Excel file directly
 	executeSQLQueriesAndCreateExcel(*sqlConfigProp, *sqlQueries)
 
-	log.Println("Done Application...")
 }
 
 /*
