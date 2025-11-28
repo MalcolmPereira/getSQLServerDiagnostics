@@ -1,0 +1,18 @@
+# DB Host Name - Some Server IP Address/FQDN
+DB_HOST=1.1.1.1
+# DB Port - SQL Server DB Port default is 1433
+DB_PORT=1433
+# DB Name - DB against which we want to run the sql queries 
+DB_NAME=my_db
+# DB User Name - DB User Name
+USER=my_secret_user
+# DB Password - DB User Password
+PASSWORD=my_secret_password
+# DB Integrated Security true or false value
+# Windows only, when part of the same windows domain 
+# Trusted true will use the current login users details for connection to the database 
+TRUSTED=false
+# USER_DEFINED Connection String
+# The DB Connection String can be populated as supported by the driver
+# Please see https://github.com/microsoft/go-mssqldb#readme for more details
+USER_DEFINED=sqlserver://user:password@my.db.host.server:1433?database=my_db&connection+timeout=30&trusted_connection=yes&encrypt=false&trustservercertificate=true

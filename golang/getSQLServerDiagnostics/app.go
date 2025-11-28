@@ -310,15 +310,33 @@ func readSQLConfig(filePath string) SQLServerConfig {
  */
 func connectToDB(sqlConfig SQLServerConfig) *sql.DB {
 	var slqConnectionString = ""
-	if sqlConfig.Trusted {
-		slqConnectionString = "sqlserver://" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&trusted_connection=yes&encrypt=false&trustservercertificate=true"
+
+	// Check if UserDefined connection string is provided and not empty
+	if sqlConfig.UserDefined != "" {
+		slqConnectionString = sqlConfig.UserDefined
+
 	} else {
-		slqConnectionString = "sqlserver://" + sqlConfig.SQLServerUser + ":" + sqlConfig.SQLServerPassword + "@" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&encrypt=false&trustservercertificate=true"
+		// Construct the connection string based on other fields
+		if sqlConfig.Trusted {
+			slqConnectionString = "sqlserver://" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&trusted_connection=yes&encrypt=false&trustservercertificate=true"
+		} else {
+			slqConnectionString = "sqlserver://" + sqlConfig.SQLServerUser + ":" + sqlConfig.SQLServerPassword + "@" + sqlConfig.SQLServerHost + ":" + sqlConfig.SQLServerPort + "?database=" + sqlConfig.SQLServerDB + "&connection+timeout=30&encrypt=false&trustservercertificate=true"
+		}
 	}
+
+	fmt.Printf("Got Connection String %s:\n", slqConnectionString)
+
+	// Open the database connection
 	db, err := sql.Open("sqlserver", slqConnectionString)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
+
+	// Validate the connection
+	if err := db.Ping(); err != nil {
+		log.Fatalf("Failed to connect to database, please make sure the connection properties are valid : %v", err)
+	}
+
 	return db
 }
 
@@ -517,10 +535,20 @@ func getSQLServerConfig(propFile string) SQLServerConfig {
 
 	if sqlServerConfig.UserDefined == "" {
 		sqlServerConfig.SQLServerHost = sqlProperties.MustGet("DB_HOST")
+		sqlServerConfig.SQLServerHost = strings.TrimSpace(sqlServerConfig.SQLServerHost)
+
 		sqlServerConfig.SQLServerPort = sqlProperties.MustGet("DB_PORT")
+		sqlServerConfig.SQLServerPort = strings.TrimSpace(sqlServerConfig.SQLServerPort)
+
 		sqlServerConfig.SQLServerDB = sqlProperties.MustGet("DB_NAME")
+		sqlServerConfig.SQLServerDB = strings.TrimSpace(sqlServerConfig.SQLServerDB)
+
 		sqlServerConfig.SQLServerUser = sqlProperties.MustGet("USER")
+		sqlServerConfig.SQLServerUser = strings.TrimSpace(sqlServerConfig.SQLServerUser)
+
 		sqlServerConfig.SQLServerPassword = sqlProperties.MustGet("PASSWORD")
+		sqlServerConfig.SQLServerPassword = strings.TrimSpace(sqlServerConfig.SQLServerPassword)
+
 		trusted, err := strconv.ParseBool(sqlProperties.MustGet("TRUSTED"))
 		if err != nil {
 			fmt.Printf("Invalid Trusted Property: %s, will default to false", sqlProperties.MustGet("TRUSTED"))
