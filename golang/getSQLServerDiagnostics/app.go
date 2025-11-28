@@ -550,44 +550,6 @@ func readQueries(filePath string) Queries {
 }
 
 /*
- * createFileName generates a sanitized file name for a query result based on the query index and name.
- * The function ensures that the file name is safe for use in the file system by replacing spaces with
- * underscores and removing special characters.
- *
- * Parameters:
- * - index: The index of the query, used as a prefix in the file name.
- * - queryName: The name of the query, which will be sanitized and included in the file name.
- *
- * Returns:
- * - A string representing the sanitized file name in the format "<index>_<sanitized_query_name>.csv".
- *
- * Functionality:
- * 1. Replaces all spaces in the `queryName` with underscores.
- * 2. Removes all special characters from the `queryName` using a regular expression.
- * 3. Concatenates the `index` and the sanitized `queryName` to generate the file name.
- * 4. Appends the `.csv` extension to the file name.
- *
- * Example:
- * Input: index = 1, queryName = "Sample Query Name!"
- * Output: "1_Sample_Query_Name.csv"
- *
- * Notes:
- * - The function ensures that the generated file name is valid and safe for use in most file systems.
- * - Special characters such as `!`, `@`, `#`, etc., are removed to avoid issues with file system compatibility.
- */
-func createFileName(index int, queryName string) string {
-	// Replace spaces with underscores
-	queryName = strings.ReplaceAll(queryName, " ", "_")
-
-	// Remove special characters using regex
-	re := regexp.MustCompile(`[^a-zA-Z0-9_]+`)
-	queryName = re.ReplaceAllString(queryName, "")
-
-	// Concatenate index and sanitized query name
-	return fmt.Sprintf("%d_%s.csv", index, queryName)
-}
-
-/*
  * SQLServerConfig holds the configuration details required to connect to a SQL Server database.
  * It includes information such as the host, port, database name, user credentials, and whether
  * to use integrated security (trusted connection).
