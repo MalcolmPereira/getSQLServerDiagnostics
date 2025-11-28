@@ -512,17 +512,22 @@ func getSQLServerConfig(propFile string) SQLServerConfig {
 	}
 
 	var sqlServerConfig SQLServerConfig
-	sqlServerConfig.SQLServerHost = sqlProperties.MustGet("DB_HOST")
-	sqlServerConfig.SQLServerPort = sqlProperties.MustGet("DB_PORT")
-	sqlServerConfig.SQLServerDB = sqlProperties.MustGet("DB_NAME")
-	sqlServerConfig.SQLServerUser = sqlProperties.MustGet("USER")
-	sqlServerConfig.SQLServerPassword = sqlProperties.MustGet("PASSWORD")
-	trusted, err := strconv.ParseBool(sqlProperties.MustGet("TRUSTED"))
-	if err != nil {
-		fmt.Printf("Invalid Trusted Property: %s, will default to false", sqlProperties.MustGet("TRUSTED"))
-		sqlServerConfig.Trusted = false
-	} else {
-		sqlServerConfig.Trusted = trusted
+	sqlServerConfig.UserDefined = sqlProperties.GetString("USER_DEFINED", "")
+	sqlServerConfig.UserDefined = strings.TrimSpace(sqlServerConfig.UserDefined)
+
+	if sqlServerConfig.UserDefined == "" {
+		sqlServerConfig.SQLServerHost = sqlProperties.MustGet("DB_HOST")
+		sqlServerConfig.SQLServerPort = sqlProperties.MustGet("DB_PORT")
+		sqlServerConfig.SQLServerDB = sqlProperties.MustGet("DB_NAME")
+		sqlServerConfig.SQLServerUser = sqlProperties.MustGet("USER")
+		sqlServerConfig.SQLServerPassword = sqlProperties.MustGet("PASSWORD")
+		trusted, err := strconv.ParseBool(sqlProperties.MustGet("TRUSTED"))
+		if err != nil {
+			fmt.Printf("Invalid Trusted Property: %s, will default to false", sqlProperties.MustGet("TRUSTED"))
+			sqlServerConfig.Trusted = false
+		} else {
+			sqlServerConfig.Trusted = trusted
+		}
 	}
 	return sqlServerConfig
 }
@@ -570,6 +575,7 @@ func readQueries(filePath string) Queries {
  * to use integrated security (trusted connection).
  *
  * Fields:
+ * - UserDefined: User defined DB Connection, this can be any free form format supported by the driver https://github.com/microsoft/go-mssqldb#readme
  * - SQLServerHost: The hostname or IP address of the SQL Server.
  * - SQLServerPort: The port number on which the SQL Server is listening.
  * - SQLServerDB: The name of the database to connect to.
@@ -578,6 +584,7 @@ func readQueries(filePath string) Queries {
  * - Trusted: A boolean indicating whether to use integrated security (trusted connection).
  */
 type SQLServerConfig struct {
+	UserDefined       string // User defined DB Connection, this can be any free form format supported by the driver https://github.com/microsoft/go-mssqldb#readme
 	SQLServerHost     string // Hostname or IP address of the SQL Server
 	SQLServerPort     string // Port number on which the SQL Server is listening
 	SQLServerDB       string // Name of the database to connect to
