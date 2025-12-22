@@ -124,8 +124,10 @@ const sql_queries = "sql_queries.json" // SQL Queries File
 func main() {
 
 	// Define command-line flags
-	sqlConfigProp := flag.String("config", sql_config, "Path to the SQL Server configuration file, defaulting to config.properties if not set.")
-	sqlQueries := flag.String("queries", sql_queries, "Path to the SQL queries JSON file, defaulting to sql_queries.json if not set. ")
+	sqlConfigProp := flag.String("config", sql_config, "Optional: Path to the SQL Server configuration file, defaulting to config.properties if not set.")
+	sqlQueries := flag.String("queries", sql_queries, "Optional: Path to the SQL queries JSON file, defaulting to sql_queries.json if not set. ")
+	interval := flag.Int("interval", 0, "Optional: Interval in minutes to run the program repeatedly. Must be greater or equal to 1 minute.")
+	duration := flag.Int("duration", 0, "Optional: Duration in hours to keep running the program repeatedly. Must be greater or equal to 1 hour.")
 
 	// Parse the command-line flags
 	flag.Parse()
@@ -149,8 +151,29 @@ func main() {
 	}
 
 	// Execute SQL queries and create Excel file directly
-	executeSQLQueriesAndCreateExcel(*sqlConfigProp, *sqlQueries)
 
+	// Calculate the total number of iterations if interval and duration are provided
+	if *interval > 0 && *duration > 0 {
+
+		totalIterations := (*duration * 60) / *interval
+		fmt.Printf("Running the program every %d minute(s) for the next %d hour(s) (%d iterations).\n", *interval, *duration, totalIterations)
+
+		for i := 0; i < totalIterations; i++ {
+			fmt.Printf("Iteration %d/%d: Executing SQL queries...\n", i+1, totalIterations)
+			executeSQLQueriesAndCreateExcel(*sqlConfigProp, *sqlQueries)
+
+			// Wait for the specified interval before the next iteration
+			if i < totalIterations-1 {
+				time.Sleep(time.Duration(*interval) * time.Minute)
+			}
+		}
+
+		fmt.Println("Program has completed all iterations. Exiting.")
+	} else {
+		// Run the program once if no interval or duration is provided
+		executeSQLQueriesAndCreateExcel(*sqlConfigProp, *sqlQueries)
+
+	}
 }
 
 /*
