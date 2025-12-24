@@ -5,13 +5,8 @@ This program connects to a SQL Server database, executes a series of SQL queries
 and generates diagnostic reports in Excel format. It uses a configuration file to define database
 connection details and dynamically processes queries to produce results directly in Excel worksheets.
 
-- Direct Excel writing: Query results are written directly to Excel sheets without intermediate CSV files
-- Memory optimization: No temporary files or directories are created
-- Simplified workflow: Single function handles both query execution and Excel generation
-- Better error handling: Improved error reporting for individual queries
-- Excel compliance: Sheet names are properly sanitized to meet Excel requirements (31 char limit, no special chars)
+The source of the SQL Queries come from https://glennsqlperformance.com/ and we acknowledge this great resource for troubleshooting SQL Server Performance.
 
-Some of the queries come from https://glennsqlperformance.com/ and we acknowledge this great resource for troubleshooting SQL Server Performance.
 
 Author: Malcolm Pereira
 Date: November 27, 2025
@@ -32,6 +27,9 @@ Usage:
 - Define SQL queries in the json file with the following structure.
   Example:
 		{
+            ...
+			...
+			...
 			"queries": [
 					{
 						"name": "CheckVersion",
@@ -79,7 +77,6 @@ import (
 	"database/sql" // Database/sql package for database operations
 
 	// SQL Server driver
-	//_ "github.com/denisenkom/go-mssqldb" // Microsoft SQL Server driver for Go From Go Community
 	_ "github.com/microsoft/go-mssqldb" // Microsoft SQL Server driver for Go From Microsoft
 
 	// Third-party packages
