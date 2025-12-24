@@ -11,7 +11,9 @@ Another source of SQL Queries come from https://github.com/amachanic/sp_whoisact
 
 SP Who is Active is another great tool to get insights into what is occurring on the database.
 
-This tool allows to get diagnostics information for offline analysis.
+Another good source of SQL Troubleshooting is https://www.brentozar.com/archive/2010/09/sql-server-dba-scripts-how-to-find-slow-sql-server-queries/
+
+This tool allows to get diagnostics information for offline analysis so you can format your own queries and get details for offline analysis.
 
 One can easily run SQL Server profiler or configure MS SQL Server Extended Activities to monitor what is occurring on the database for troubleshooting
 performance issues in near real time, which is different from the purpose of this tool which allows for more offline analysis.

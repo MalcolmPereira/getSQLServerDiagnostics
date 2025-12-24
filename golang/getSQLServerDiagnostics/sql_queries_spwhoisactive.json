@@ -1,0 +1,36 @@
+{	
+	"querydoc":{
+		"doc_1":"This documentation explains the JSON schema on how the queries should be structured so it can be executed from the program ",
+		"doc_2":"querysource element - contains any additional information from where these queries come from, applicable if we are getting the diagnostic queries from some source, we want to acknowledge them.",
+		"doc_3":"queries element contains list of queries that we want to execute this is made of on list of queries where each query contains name, description, query and any additional notes",
+		"doc_4":"name this contains the name of the query, we want this to be less than or equal to 31 chars with no special chars, this is used to name the worksheet in the generated excel.",
+		"doc_5":"description this contains the description for the query we are executing",
+		"doc_6":"query this is the actual query to be executed, please format it to be in one line without any chars that will conflict with the JSON structure",
+		"doc_7":"notes this is any additional notes you might want to add"
+	},
+	"querysource":{
+		"sqlserverversion":"2022-2025-AzureSQL",
+		"name":"SP Who is Active Queries",
+		"author":"Adam Machanic -https://github.com/amachanic/sp_whoisactive/releases",
+		"lastmodified":"Last Modified: November 10, 2021",
+		"source":"https://github.com/amachanic/sp_whoisactive/releases",
+		"url":"https://github.com/amachanic/sp_whoisactive/releases http://whoisactive.com/docs/", 		
+		"comments":"https://github.com/amachanic/sp_whoisactive/releases http://whoisactive.com/docs/",
+		"copyright":"(C) 2017 Adam Machanic"
+	},
+	"queries": [
+		{
+			"name": "FindBlockLeaders",
+			"description": "Find what sessions are blocking other sessions",
+			"query": "EXEC sp_WhoIsActive @Output_Column_List = '[session_id][block%][login%][additional%][%]', @find_block_leaders = 1, @sort_order = '[blocked_session_count] DESC', @get_additional_info=1",
+			"notes":"Oftentimes blocking situations are a bit more complex than one session blocking some other request. In busy systems blocking chains can build up that include dozens or even hundreds of requests, all waiting on one another."
+		},
+		{
+			"name": "FindLocks",
+			"description": "Find what locks are waiting on other locks",
+			"query": "EXEC sp_WhoIsActive @Output_Column_List = '[locks][session_id][block%][login%][additional%][%]', @get_locks = 1, @get_additional_info=1    ",
+			"notes":"Behind every block is something causing the block. Something that, without which, there could be no block. And that thing is called a lock."
+		}
+	]
+}
+
