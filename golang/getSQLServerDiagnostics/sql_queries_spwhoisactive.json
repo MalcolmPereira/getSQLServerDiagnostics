@@ -23,13 +23,13 @@
 			"name": "FindBlockLeaders",
 			"description": "Find what sessions are blocking other sessions",
 			"query": "EXEC sp_WhoIsActive @Output_Column_List = '[session_id][block%][login%][additional%][%]', @find_block_leaders = 1, @sort_order = '[blocked_session_count] DESC', @get_additional_info=1",
-			"notes":"Oftentimes blocking situations are a bit more complex than one session blocking some other request. In busy systems blocking chains can build up that include dozens or even hundreds of requests, all waiting on one another."
+			"notes":"SP Who is Active Needs to be Installed - Oftentimes blocking situations are a bit more complex than one session blocking some other request. In busy systems blocking chains can build up that include dozens or even hundreds of requests, all waiting on one another."
 		},
 		{
 			"name": "FindLocks",
 			"description": "Find what locks are waiting on other locks",
 			"query": "EXEC sp_WhoIsActive @Output_Column_List = '[locks][session_id][block%][login%][additional%][%]', @get_locks = 1, @get_additional_info=1    ",
-			"notes":"Behind every block is something causing the block. Something that, without which, there could be no block. And that thing is called a lock."
+			"notes":"SP Who is Active Needs to be Installed - Behind every block is something causing the block. Something that, without which, there could be no block. And that thing is called a lock."
 		}
 	]
 }
