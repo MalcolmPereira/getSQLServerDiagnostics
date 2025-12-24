@@ -7,6 +7,15 @@ connection details and dynamically processes queries to produce results directly
 
 The source of the SQL Queries come from https://glennsqlperformance.com/ and we acknowledge this great resource for troubleshooting SQL Server Performance.
 
+Another source of SQL Queries come from https://github.com/amachanic/sp_whoisactive/releases and http://whoisactive.com/docs/
+
+SP Who is Active is another great tool to get insights into what is occurring on the database.
+
+This tool allows to get diagnostics information for offline analysis.
+
+One can easily run SQL Server profiler or configure MS SQL Server Extended Activities to monitor what is occurring on the database for troubleshooting
+performance issues in near real time, which is different from the purpose of this tool which allows for more offline analysis.
+
 
 Author: Malcolm Pereira
 Date: November 27, 2025
