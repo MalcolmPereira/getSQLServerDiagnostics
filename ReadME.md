@@ -1,26 +1,44 @@
-# getSQLServerDiagnostics
+# Automating SQL Server Diagnostic Collection with Go and Excel Output
 
-A command-line tool for collecting SQL Server diagnostic information and generating Excel reports for offline analysis.
+A command line tool for collecting SQL Server diagnostic information and generating Excel reports for offline analysis.
+
+Code: [Get SQL Server Diagnostics](https://github.com/MalcolmPereira/getSQLServerDiagnostics)
 
 ---
 
-## The Challenge: Diagnosing SQL Server Issues Remotely
+## Diagnosing SQL Server Issues Remotely
 
-Picture this scenario: it's 2 AM and you receive an alert that a critical production database is experiencing performance issues. The application team reports slow queries, timeouts, and frustrated users. You need answers—fast.
-
-In an ideal world, you'd have direct access to the server, SQL Server Management Studio open, and hours to methodically investigate. But reality is often different. Maybe you're supporting a client's database remotely. Perhaps the database is behind strict firewall rules, and you only have limited connection windows. Or you're part of a consulting team that needs to gather diagnostic data from dozens of SQL Server instances across different environments.
+In an ideal world, one would have direct access to the server, SQL Server Management Studio open, and hours to methodically investigate. But reality is often different. Maybe you are supporting a client installation remotely. Perhaps the database is behind strict firewall rules, and you only have limited connection windows, Or you're part of a consulting team that needs to gather diagnostic data from dozens of SQL Server instances across different environments. The application is not behaving well and issues seem to stem to the database. We need a way to gather and database diagnostic data for analysis.
 
 Traditional troubleshooting approaches have limitations in these scenarios:
 
-**Real-time monitoring tools** like SQL Server Profiler or Extended Events are excellent for live analysis, but they require persistent connections and hands-on interaction. When you're working across time zones or dealing with intermittent issues, being "always on" isn't practical.
+**Real Time monitoring tools** like SQL Server Profiler or Extended Events are excellent for live analysis, but they require persistent connections and hands on interaction. When you are working across time zones or dealing with intermittent issues, being always on is not practical.
 
-**Built-in reports and dashboards** provide useful summaries, but often lack the depth needed for serious troubleshooting. You end up running the same diagnostic queries manually, copying results to spreadsheets, and repeating this process for each server.
+**Reports and Dashboards** provide useful summaries, but often lack the depth needed for serious troubleshooting. You end up running the same diagnostic queries manually, copying results to spreadsheets, and repeating this process for each server.
 
-**Remote Desktop sessions** work but are bandwidth-heavy, require constant connectivity, and don't scale when you need to collect data from multiple servers.
+**Remote Desktop sessions** work but are bandwidth heavy, require constant connectivity, and do not scale when you need to collect data from multiple servers.
 
-What if you could capture a comprehensive snapshot of your SQL Server's health—configuration settings, performance counters, wait statistics, index usage, query plans, and more—all in a single Excel file that you can analyze offline, share with colleagues, or archive for trend analysis?
+What if you could capture a comprehensive snapshot of your SQL Server's health configuration settings, performance counters, wait statistics, index usage, query plans, and more all in a single Excel file that you can analyze offline, share with colleagues, or archive for trend analysis ?
 
----
+This SQL Server Diagnostic Collection tool can help, it comes will some well proven samples and you can plug in your own as needed.
+
+## Acknowledgments
+
+This tool stands on the shoulders of giants in the SQL Server community:
+
+[Glenn Berry](https://glennsqlperformance.com/)
+
+- For his meticulously maintained SQL Server Diagnostic Information Queries, updated for each SQL Server version and widely used by DBAs worldwide.
+
+[Adam Machanic](http://whoisactive.com/)
+
+- For sp_whoisactive, the essential stored procedure for understanding what is currently running on your SQL Server.
+
+[Brent Ozar](https://www.brentozar.com/)
+
+- For his extensive library of troubleshooting scripts and educational resources that help DBAs solve real world performance problems.
+
+Their freely shared expertise makes tools like this possible.
 
 ## How This Tool Helps
 
@@ -35,16 +53,16 @@ The approach is simple but powerful:
 
 This tool leverages the excellent diagnostic queries developed by SQL Server experts like [Glenn Berry](https://glennsqlperformance.com/), whose SQL Server Diagnostic Information Queries have become an industry standard for performance troubleshooting. It also supports [Adam Machanic's sp_whoisactive](http://whoisactive.com/) and queries inspired by [Brent Ozar's troubleshooting scripts](https://www.brentozar.com/).
 
-By packaging these expert-level queries into an automated collection process, you get consistent, repeatable diagnostic snapshots without manually copying and pasting results.
+By packaging these expert level queries into an automated collection process, you get consistent, repeatable diagnostic snapshots without manually copying and pasting results.
 
 ### Key Benefits
 
 - **Offline analysis**: Collect data once, analyze anywhere without maintaining a live connection
 - **Consistency**: Same queries run the same way every time, making it easy to compare snapshots over time
 - **Portability**: A single Excel file is easy to share, email, or attach to support tickets
-- **Flexibility**: Bring your own queries or use the pre-built query sets for different SQL Server versions
+- **Flexibility**: Bring your own queries or use the pre built query sets for different SQL Server versions
 - **Scheduling**: Run continuously at intervals for monitoring (e.g., every 5 minutes for 24 hours)
-- **No agent required**: Just needs a database connection—no software installation on the server
+- **No agent required**: Just needs a database connection no software installation on the server
 
 ---
 
@@ -78,7 +96,7 @@ The `USER_DEFINED` option gives you full control over the connection string, whi
 
 ### 2. Query Definition Files (JSON)
 
-Queries are defined in JSON files, making them easy to version control, share, and customize. The tool ships with several pre-built query sets:
+Queries are defined in JSON files, making them easy to version control, share, and customize. The tool ships with several pre built query sets:
 
 | File | Purpose |
 |------|---------|
@@ -127,29 +145,34 @@ The direct-to-Excel approach means faster execution and less disk I/O compared t
 
 - Go 1.24 or later installed
 - Network access to your SQL Server instance
-- A SQL Server login with appropriate permissions to run diagnostic queries (typically `VIEW SERVER STATE` and `VIEW DATABASE STATE`)
+- A SQL Server login with appropriate permissions to run diagnostic queries.
 
 ### Quick Start
 
 1. **Clone the repository** and navigate to the project directory
 
 2. **Install dependencies**:
+
    ```bash
    go mod tidy
    ```
 
 3. **Configure your connection** by copying the template:
+
    ```bash
    cp config.properties_template config.properties
    ```
+
    Edit `config.properties` with your server details.
 
 4. **Review the query file** you plan to use (e.g., `sql_queries.json`) to understand what will be executed.
 
 5. **Run the tool**:
+
    ```bash
    go run app.go
    ```
+
    Type `yes` when prompted to confirm you've reviewed the queries.
 
 6. **Find your results** in the generated Excel file (e.g., `sql_diagnostics_07012026_143022.xlsx`)
@@ -210,25 +233,8 @@ While the included query sets cover most common diagnostic scenarios, you can cr
 ```
 
 Tips for custom queries:
+
 - Keep query names under 31 characters (Excel worksheet limit)
 - Avoid special characters in names: `\ / ? * [ ] :`
 - Format queries as single lines in the JSON (escape special characters as needed)
 - Test queries manually before adding them to ensure they work on your SQL Server version
-
----
-
-## Acknowledgments
-
-This tool builds upon the incredible work of the SQL Server community:
-
-- **Glenn Berry** - [SQL Server Diagnostic Information Queries](https://glennsqlperformance.com/)
-- **Adam Machanic** - [sp_whoisactive](https://github.com/amachanic/sp_whoisactive)
-- **Brent Ozar** - [SQL Server troubleshooting resources](https://www.brentozar.com/)
-
-Their freely shared expertise makes tools like this possible.
-
----
-
-## License
-
-Please review the copyright notices in the query JSON files. The diagnostic queries from Glenn Berry and others include their own usage terms for non-commercial purposes.
